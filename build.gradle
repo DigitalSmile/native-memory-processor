@@ -1,0 +1,28 @@
+plugins {
+    id 'java'
+}
+
+group = 'org.digitalsmile'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(":jextract")
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+ext {
+    jdk22_home = '/home/ds/.jdks/openjdk-22'
+    llvm_home = '/lib/llvm-15'
+    jacoco_cli = ''
+    jtreg_home = ''
+}
+
+test {
+    useJUnitPlatform()
+}
