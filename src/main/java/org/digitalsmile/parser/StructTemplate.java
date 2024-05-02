@@ -4,7 +4,7 @@ public class StructTemplate {
     public static final String TEMPLATE = """
                         package ${packageName};
 
-                        import org.digitalsmile.runj.NativeMemoryLayout;
+                        import org.digitalsmile.NativeMemoryLayout;
 
                         import java.lang.foreign.MemoryLayout;
                         import java.lang.foreign.MemorySegment;

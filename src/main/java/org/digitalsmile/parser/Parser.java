@@ -4,8 +4,13 @@ import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.JextractTool;
 import org.openjdk.jextract.Type;
 
+import javax.annotation.processing.ProcessingEnvironment;
+import javax.tools.Diagnostic;
+import javax.tools.FileObject;
+import javax.tools.StandardLocation;
 import java.io.File;
 import java.io.IOException;
+import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -13,29 +18,37 @@ import java.util.List;
 
 public class Parser {
     private final StructRecord structRecord = new StructRecord();
+    private final ProcessingEnvironment processingEnvironment;
 
-    public void parse(Path headerPath, String structName, String prettyName) throws IOException {
+    public Parser(ProcessingEnvironment processingEnv) {
+        this.processingEnvironment = processingEnv;
+    }
+
+    public void parse(Path headerPath, String structName, String prettyName, String packageName) throws IOException {
         Declaration.Scoped parsed;
         try {
             parsed = JextractTool.parse(List.of(headerPath));
         } catch (ExceptionInInitializerError e) {
-            System.err.println(e.getCause());
+            processingEnvironment.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getCause().toString());
             return;
         }
-        structRecord.setPackageName("org.digitalsmile.runj");
+        structRecord.setPackageName(packageName);
         structRecord.setRecordName(prettyName);
         for (Declaration declaration : parsed.members()) {
             if (declaration.name().equals(structName)) {
                 var scoped = (Declaration.Scoped) declaration;
-                var attrs = scoped.attributes();
-                for (Record record : attrs) {
-                    System.out.println(record);
-                }
                 parseField(scoped);
-                //arguments = String.join(", ",argumentsList.toArray(String[]::new));
             }
         }
-        Files.writeString(Path.of(Path.of("src/main/java/org/digitalsmile/runj/") + File.separator + prettyName + ".java"), structRecord.compileTemplate());
+        try {
+            FileObject file = processingEnvironment.getFiler().createSourceFile(prettyName);
+            Writer writer = file.openWriter();
+            writer.write(structRecord.compileTemplate());
+            writer.close();
+        } catch (Exception e) {
+            processingEnvironment.getMessager().printMessage(Diagnostic.Kind.ERROR, e.toString());
+        }
+        //Files.writeString(Path.of(Path.of("src/main/java/org/digitalsmile/runj/") + File.separator + prettyName + ".java"), structRecord.compileTemplate());
         //System.out.println(structRecord.compileTemplate());
 
     }
