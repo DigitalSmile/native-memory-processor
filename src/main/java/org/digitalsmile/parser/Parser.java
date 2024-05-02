@@ -40,8 +40,9 @@ public class Parser {
                 parseField(scoped);
             }
         }
+
         try {
-            FileObject file = processingEnvironment.getFiler().createSourceFile(prettyName);
+            FileObject file = processingEnvironment.getFiler().createSourceFile(packageName + "." + prettyName);
             Writer writer = file.openWriter();
             writer.write(structRecord.compileTemplate());
             writer.close();

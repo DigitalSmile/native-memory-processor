@@ -25,7 +25,7 @@ ext {
 }
 
 compileJava {
-    options.compilerArgs += ['--enable-preview']
+    //options.compilerArgs += ['--enable-preview']
 }
 
 test {
