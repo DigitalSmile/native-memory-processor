@@ -2,11 +2,16 @@ package org.digitalsmile;
 
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
+import java.lang.invoke.MethodHandle;
 
 /**
  * Interface that provides memory layout of class file for using with FFM API of recent Java versions.
  */
 public interface NativeMemoryLayout {
+
+    default MemorySegment invokeExact(MethodHandle handle, MemorySegment buffer) throws Throwable {
+        return (MemorySegment) handle.invokeExact(buffer, 0L);
+    }
 
     /**
      * Converts {@link MemorySegment} buffer to a class / object structure.
@@ -25,5 +30,7 @@ public interface NativeMemoryLayout {
      * @throws Throwable unchecked exception
      */
     void toBytes(MemorySegment buffer) throws Throwable;
+
+    boolean isEmpty();
 
 }

@@ -9,4 +9,7 @@ public @interface Function {
     String library() default "libc";
     boolean useErrno() default false;
     boolean useStrerror() default false;
+    String returnParameter() default "";
+    Parameter[] parameters() default {};
+
 }

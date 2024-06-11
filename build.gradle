@@ -11,18 +11,18 @@ repositories {
 }
 
 dependencies {
-    implementation project(":jextract")
-
+    //implementation project(":jextract")
+    implementation 'io.soabase.java-composer:java-composer:1.0'
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
 
-ext {
-    jdk22_home = '/home/ds/.jdks/openjdk-22'
-    llvm_home = '/lib/llvm-15'
-    jacoco_cli = ''
-    jtreg_home = ''
-}
+//ext {
+//    jdk22_home = '/home/ds/.jdks/openjdk-22'
+//    llvm_home = '/lib/llvm-15'
+//    jacoco_cli = ''
+//    jtreg_home = ''
+//}
 
 compileJava {
     //options.compilerArgs += ['--enable-preview']
