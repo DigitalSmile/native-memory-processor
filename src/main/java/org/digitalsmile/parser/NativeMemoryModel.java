@@ -6,11 +6,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class NativeMemoryModel {
-    private final String structName;
+    private final String fileName;
     private final List<NativeMemoryNode> nodes = new ArrayList<>();
 
-    public NativeMemoryModel(String structName) {
-        this.structName = structName;
+    public NativeMemoryModel(String fileName) {
+        this.fileName = fileName;
     }
 
     public void addNode(NativeMemoryNode node) {
@@ -28,14 +28,14 @@ public class NativeMemoryModel {
         return nodes;
     }
 
-    public String getStructName() {
-        return structName;
+    public String getFileName() {
+        return fileName;
     }
 
     @Override
     public String toString() {
         return "NativeMemoryModel{" +
-                "structName='" + structName + '\'' +
+                "structName='" + fileName + '\'' +
                 ", nodes=" + nodes +
                 '}';
     }

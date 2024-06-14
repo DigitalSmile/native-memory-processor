@@ -11,5 +11,6 @@ public @interface Function {
     boolean useStrerror() default false;
     String returnParameter() default "";
     Parameter[] parameters() default {};
+    String returnType();
 
 }

@@ -1,6 +1,6 @@
 package org.digitalsmile;
 
-@Native(header = "/usr/src/linux-headers-6.2.0-39/include/uapi/linux/gpio.h")
+@NativeMemory(header = "/usr/src/linux-headers-6.2.0-39/include/uapi/linux/gpio.h")
 @Structs({
         @Struct(name = "gpiochip_info", javaName = "ChipInfo"),
         @Struct(name = "gpio_v2_line_info", javaName = "LineInfo"),

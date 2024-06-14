@@ -4,7 +4,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 @Retention(RetentionPolicy.RUNTIME)
-public @interface Parameter {
+public @interface Enum {
     String name();
-    ParameterType parameterType() default ParameterType.BY_VALUE;
+    String javaName() default "";
 }

@@ -62,10 +62,18 @@ public record TypeMapping(List<Type.Primitive.Kind> types, ValueLayout valueLayo
     }
 
     public CodeBlock isEmpty() {
+        return CodeBlock.builder().add(" == 0").build();
+    }
+
+    public CodeBlock isNotEmpty() {
         return CodeBlock.builder().add(" > 0").build();
     }
 
-    public CodeBlock isArrayEmpty() {
+    public CodeBlock isNotArrayEmpty() {
         return CodeBlock.builder().add(".length > 0").build();
+    }
+
+    public CodeBlock isArrayEmpty() {
+        return CodeBlock.builder().add(".length == 0").build();
     }
 }

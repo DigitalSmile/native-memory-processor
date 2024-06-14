@@ -7,5 +7,4 @@ import java.lang.annotation.RetentionPolicy;
 public @interface Struct {
     String name();
     String javaName() default "";
-    boolean followComplexTypes() default false;
 }

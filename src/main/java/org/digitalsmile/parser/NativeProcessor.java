@@ -2,13 +2,11 @@ package org.digitalsmile.parser;
 
 
 import com.squareup.javapoet.JavaFile;
-import org.digitalsmile.Native;
-import org.digitalsmile.Struct;
-import org.digitalsmile.Structs;
+import org.digitalsmile.*;
+import org.digitalsmile.Enum;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
@@ -29,16 +27,16 @@ public class NativeProcessor extends AbstractProcessor {
 
     @Override
     public Set<String> getSupportedAnnotationTypes() {
-        return Set.of(Native.class.getName(), Structs.class.getName(), Struct.class.getName());
+        return Set.of(NativeMemory.class.getName(), Function.class.getName());
     }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         if (roundEnv.processingOver()) {
-            return false;
+            return true;
         }
-        for (Element element : roundEnv.getElementsAnnotatedWith(Native.class)) {
-            var nativeAnnotation = element.getAnnotation(Native.class);
+        for (Element element : roundEnv.getElementsAnnotatedWith(NativeMemory.class)) {
+            var nativeAnnotation = element.getAnnotation(NativeMemory.class);
             var headerFile = nativeAnnotation.header();
             Path headerPath;
             if (headerFile.startsWith("/")) {
@@ -61,8 +59,12 @@ public class NativeProcessor extends AbstractProcessor {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Cannot find header file '" + headerFile + "' annotated in class '" + element + "'!");
                 return false;
             }
+
             var structs = element.getAnnotation(Structs.class);
-            var parsedStructs = Arrays.stream(structs.value()).map(struct -> struct.name() + ":" + struct.javaName()).toList();
+            var enums = element.getAnnotation(Enums.class);
+
+            var parsedStructs = structs != null ? Arrays.stream(structs.value()).map(struct -> "S!" + struct.name() + ":" + struct.javaName()).toList() : Collections.<String>emptyList();
+            var parsedEnums = enums != null ? Arrays.stream(enums.value()).map(enoom -> "E!" + enoom.name() + ":" + enoom.javaName()).toList() : Collections.<String>emptyList();
 
             var packageName = processingEnv.getElementUtils().getPackageOf(element).getQualifiedName().toString();
             List<String> args = new ArrayList<>();
@@ -70,23 +72,44 @@ public class NativeProcessor extends AbstractProcessor {
             args.add(headerPath.toFile().getAbsolutePath());
             args.add(packageName);
             args.add(runId);
+            args.add(enums != null ? String.valueOf(nativeAnnotation.createEnumFromRootDefines()) : "false");
             args.addAll(parsedStructs);
+            args.addAll(parsedEnums);
             processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, runId);
             try {
                 parse(args);
                 var tmpPath = System.getProperty("java.io.tmpdir");
-                for (Struct struct : structs.value()) {
-                    var prettyName = struct.javaName().isEmpty() ? struct.name() : struct.javaName();
-                    var outputFile = Files.readString(Path.of(tmpPath, runId, packageName, prettyName));
-                    FileObject file = processingEnv.getFiler().createSourceFile(packageName + "." + prettyName);
-                    Writer writer = file.openWriter();
-                    writer.write(outputFile);
-                    writer.close();
-                }
+                    var directory = Path.of(tmpPath, runId, packageName).toFile();
+                    if (directory.exists()) {
+                        var files = directory.listFiles();
+                        if (files != null) {
+                            for (File file : files) {
+                                var outputFile = Files.readString(Path.of(file.getAbsolutePath()));
+                                FileObject file1 = processingEnv.getFiler().createSourceFile(packageName + "." + file.getName());
+                                Writer writer = file1.openWriter();
+                                writer.write(outputFile);
+                                writer.close();
+                            }
+                        }
+                    }
             } catch (IOException | InterruptedException e) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
             }
+            List<Element> elementList = new ArrayList<>(roundEnv.getElementsAnnotatedWith(Function.class));
+            var javaName = element.getSimpleName().toString();
+
+            try {
+                var outputFile = FunctionComposer.compose(packageName, javaName, elementList, processingEnv.getTypeUtils());
+                var file = processingEnv.getFiler().createSourceFile(packageName + "." + javaName + "Impl");
+                Writer writer = file.openWriter();
+                writer.write(outputFile);
+                writer.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
+
+
         return true;
     }
 

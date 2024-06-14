@@ -4,22 +4,33 @@ import org.openjdk.jextract.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class NativeMemoryNode {
     private final String name;
     private final Type type;
+    private final Object value;
     private final long arraySize;
     private final List<NativeMemoryNode> nodes = new ArrayList<>();
 
     public NativeMemoryNode(String name, Type type, long arraySize) {
         this.name = name;
         this.type = type;
+        this.value = null;
         this.arraySize = arraySize;
     }
 
     public NativeMemoryNode(String name, Type type) {
         this.name = name;
         this.type = type;
+        this.value = null;
+        this.arraySize = 0;
+    }
+
+    public NativeMemoryNode(String name, Type type, Object value) {
+        this.name = name;
+        this.type = type;
+        this.value = value;
         this.arraySize = 0;
     }
 
@@ -40,25 +51,15 @@ public class NativeMemoryNode {
     }
 
     public String getPrettyName() {
-        if (name.matches("([a-z]+[a-zA-Z0-9]+)+")) {
-            return name;
-        }
-        var words = name.split("[\\W_-]+");
-        var builder = new StringBuilder();
-        for (int i = 0; i < words.length; i++) {
-            var word = words[i];
-            if (i == 0) {
-                word = word.isEmpty() ? word : word.toLowerCase();
-            } else {
-                word = word.isEmpty() ? word : Character.toUpperCase(word.charAt(0)) + word.substring(1).toLowerCase();
-            }
-            builder.append(word);
-        }
-        return builder.toString();
+        return PrettyName.get(name);
     }
 
     public Type getType() {
         return type;
+    }
+
+    public Object getValue() {
+        return value;
     }
 
     public List<NativeMemoryNode> getNodes() {
