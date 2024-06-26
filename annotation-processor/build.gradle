@@ -1,0 +1,73 @@
+plugins {
+    id 'java'
+    id "com.vanniktech.maven.publish" version "0.29.0"
+}
+
+group = 'io.github.digitalsmile.native'
+version = '0.3'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'io.soabase.java-composer:java-composer:1.0'
+    implementation 'io.github.digitalsmile.native:annotation:0.2'
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+import com.vanniktech.maven.publish.SonatypeHost
+mavenPublishing {
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    signAllPublications()
+    coordinates("io.github.digitalsmile.native", "annotation-processor", "0.3")
+
+    pom {
+        name = "Native Memory Annotation processor"
+        description = "A Native Memory Annotation processor used to reduce boilerplate code for Java FFM API."
+        inceptionYear = "2024"
+        url = "https://github.com/DigitalSmile/native-memory-processor"
+        licenses {
+            license {
+                name = "MIT License"
+                url = "https://opensource.org/licenses/mit-license.php"
+                distribution = "repo"
+            }
+        }
+        developers {
+            developer {
+                id = "digitalsmile"
+                name = "DigitalSmile"
+                url = "https://github.com/digitalsmile/"
+            }
+        }
+        scm {
+            url = "https://github.com/DigitalSmile/native-memory-processor"
+            connection = "scm:git:git://github.com/DigitalSmile/native-memory-processor.git"
+            developerConnection = "scm:git:ssh://git@github.com/DigitalSmile/native-memory-processor.git"
+        }
+    }
+}
+
+javadoc {
+    options.addBooleanOption('html5', true)
+}
+
+java {
+    targetCompatibility = "22";
+}
+
+jar {
+    manifest {
+        attributes(
+                "Enable-Native-Access": "ALL-UNNAMED",
+                'Automatic-Module-Name': 'org.digitalsmile.processor'
+        )
+    }
+}
+
+test {
+    useJUnitPlatform()
+}

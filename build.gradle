@@ -3,31 +3,6 @@ plugins {
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
-group = 'org.digitalsmile'
-version = '1.0-SNAPSHOT'
-
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    //implementation project(":jextract")
-    implementation 'io.soabase.java-composer:java-composer:1.0'
-    testImplementation platform('org.junit:junit-bom:5.10.0')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-}
-
-//ext {
-//    jdk22_home = '/home/ds/.jdks/openjdk-22'
-//    llvm_home = '/lib/llvm-15'
-//    jacoco_cli = ''
-//    jtreg_home = ''
-//}
-
-compileJava {
-    //options.compilerArgs += ['--enable-preview']
-}
-
-test {
-    useJUnitPlatform()
+build {
+    dependsOn gradle.includedBuild('annotation-processor-test').task(':build')
 }

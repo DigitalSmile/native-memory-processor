@@ -1,0 +1,21 @@
+plugins {
+    id 'java'
+}
+
+group = 'io.github.digitalsmile.native'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'io.github.digitalsmile.native:annotation:0.2'
+    testAnnotationProcessor 'io.github.digitalsmile.native:annotation-processor:0.3'
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+test {
+    useJUnitPlatform()
+}

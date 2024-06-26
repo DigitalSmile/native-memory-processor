@@ -1,3 +1,5 @@
 rootProject.name = 'native-memory-processor'
-//include 'jextract'
+includeBuild 'annotation'
+includeBuild 'annotation-processor'
+includeBuild 'annotation-processor-test'
 
