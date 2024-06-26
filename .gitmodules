@@ -1,4 +1,0 @@
-[submodule "jextract"]
-	path = jextract
-	url = https://github.com/openjdk/jextract
-	branch = jdk21
