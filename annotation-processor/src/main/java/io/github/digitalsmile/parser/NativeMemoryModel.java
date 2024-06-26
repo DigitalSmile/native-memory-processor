@@ -35,7 +35,7 @@ public class NativeMemoryModel {
     @Override
     public String toString() {
         return "NativeMemoryModel{" +
-                "structName='" + fileName + '\'' +
+                "fileName='" + fileName + '\'' +
                 ", nodes=" + nodes +
                 '}';
     }

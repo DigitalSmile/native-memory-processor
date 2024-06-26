@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'io.github.digitalsmile.native'
-version = '0.4'
+version = '0.5'
 
 repositories {
     mavenCentral()
@@ -18,7 +18,7 @@ import com.vanniktech.maven.publish.SonatypeHost
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
-    coordinates("io.github.digitalsmile.native", "annotation", "0.4")
+    coordinates("io.github.digitalsmile.native", "annotation", "0.5")
 
     pom {
         name = "Native Memory Annotation"

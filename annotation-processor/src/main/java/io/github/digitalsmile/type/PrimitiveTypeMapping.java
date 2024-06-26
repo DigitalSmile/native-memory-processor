@@ -61,7 +61,13 @@ public record PrimitiveTypeMapping(List<Type.Primitive.Kind> types, ValueLayout 
 
     @Override
     public CodeBlock newConstructor() {
-        return CodeBlock.builder().add("$L", valueLayout.carrier().equals(short.class) ? "(short) 0" : "0").build();
+        var casting = "";
+        if (valueLayout.carrier().equals(short.class)) {
+            casting = "(short) ";
+        } else if (valueLayout.carrier().equals(byte.class)) {
+            casting = "(byte) ";
+        }
+        return CodeBlock.builder().add("$L", casting + "0").build();
     }
 
     @Override

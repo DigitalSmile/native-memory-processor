@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'io.github.digitalsmile.native'
-version = '0.4'
+version = '0.5'
 
 repositories {
     mavenCentral()
@@ -12,7 +12,7 @@ repositories {
 
 dependencies {
     implementation 'io.soabase.java-composer:java-composer:1.0'
-    implementation 'io.github.digitalsmile.native:annotation:0.4'
+    implementation 'io.github.digitalsmile.native:annotation:0.5'
 
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'

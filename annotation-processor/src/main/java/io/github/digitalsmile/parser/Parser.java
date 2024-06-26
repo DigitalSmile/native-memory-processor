@@ -1,6 +1,7 @@
 package io.github.digitalsmile.parser;
 
 import io.github.digitalsmile.ParsingOption;
+import io.github.digitalsmile.annotation.structure.Unions;
 import io.github.digitalsmile.composers.EnumComposer;
 import io.github.digitalsmile.composers.StructComposer;
 import org.openjdk.jextract.Declaration;
@@ -8,17 +9,21 @@ import org.openjdk.jextract.JextractTool;
 import org.openjdk.jextract.Type;
 import org.openjdk.jextract.impl.TypeImpl;
 
+import javax.lang.model.SourceVersion;
 import java.io.*;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 
 public class Parser {
     private final Declaration.Scoped parsed;
     private final String packageName;
     private final boolean rootEnums;
+    private final List<String> allParsingList;
     private final Map<String, String> parsingStructsMap;
+    private final Map<String, String> parsingUnionsMap;
     private final Map<String, String> parsingEnumsMap;
 
     private final String filePath;
@@ -31,20 +36,22 @@ public class Parser {
         properties.load(System.in);
 
         var header = properties.getProperty(ParsingOption.HEADER_FILE.getOption());
+
         Declaration.Scoped parsed;
         try {
             parsed = JextractTool.parse(Path.of(header));
-        } catch (ExceptionInInitializerError e) {
+        } catch (Throwable e) {
             sendError(e.getMessage());
             return;
         }
         var packageName = properties.getProperty(ParsingOption.PACKAGE_NAME.getOption());
         var rootEnums = properties.getProperty(ParsingOption.ROOT_ENUM_CREATION.getOption());
-        ;
+        var allParsingList = properties.getProperty(ParsingOption.ALL_PARSING_LIST.getOption());
 
         var keys = properties.keys();
         Map<String, String> parsingStructsMap = new HashMap<>();
         Map<String, String> parsingEnumsMap = new HashMap<>();
+        Map<String, String> parsingUnionsMap = new HashMap<>();
         while (keys.hasMoreElements()) {
             var key = (String) keys.nextElement();
             var value = (String) properties.get(key);
@@ -52,36 +59,43 @@ public class Parser {
                 parsingStructsMap.put(key.split("Structs.")[1], value);
             } else if (key.startsWith("Enums.")) {
                 parsingEnumsMap.put(key.split("Enums.")[1], value);
+            } else if (key.startsWith("Unions.")) {
+                parsingUnionsMap.put(key.split("Unions.")[1], value);
             } else if (key.equals("Structs")) {
                 parsingStructsMap.put("Structs", value);
             } else if (key.equals("Enums")) {
                 parsingEnumsMap.put("Enums", value);
+            } else if (key.equals("Unions")) {
+                parsingUnionsMap.put("Unions", value);
             }
         }
-        var parser = new Parser(parsed, packageName, header, rootEnums, parsingStructsMap, parsingEnumsMap);
+        var parser = new Parser(parsed, packageName, header, rootEnums, allParsingList, parsingStructsMap, parsingUnionsMap, parsingEnumsMap);
         parser.parse();
     }
 
-    public Parser(Declaration.Scoped parsed, String packageName, String filePath, String rootEnums, Map<String, String> parsingStructsMap, Map<String, String> parsingEnumsMap) {
+    public Parser(Declaration.Scoped parsed, String packageName, String filePath, String rootEnums, String allParsingList, Map<String, String> parsingStructsMap, Map<String, String> parsingUnionsMap, Map<String, String> parsingEnumsMap) {
         this.parsed = parsed;
         this.packageName = packageName;
         this.rootEnums = Boolean.parseBoolean(rootEnums);
         this.filePath = filePath;
         var fileBlocks = filePath.split(Pattern.quote(File.separator));
         this.fileName = fileBlocks[fileBlocks.length - 1].split("\\.")[0];
+        this.allParsingList = Stream.of(allParsingList.split(",")).map(String::trim).toList();
+
         this.parsingStructsMap = parsingStructsMap;
         this.parsingEnumsMap = parsingEnumsMap;
+        this.parsingUnionsMap = parsingUnionsMap;
     }
 
     private String getPrettyName(Map<String, String> mapper, Declaration declaration) {
         if (mapper.isEmpty()) {
-            return declaration.name();
+            return SourceVersion.isKeyword(declaration.name()) ? "_" + declaration.name() : declaration.name();
         }
         var prettyName = mapper.get(declaration.name());
         if (prettyName == null) {
-            return declaration.name();
+            return SourceVersion.isKeyword(declaration.name()) ? "_" + declaration.name() : declaration.name();
         }
-        return prettyName;
+        return SourceVersion.isKeyword(prettyName) ? "_" + prettyName : prettyName;
     }
 
     public void parse() throws IOException {
@@ -97,12 +111,21 @@ public class Parser {
             parseAllEnums = true;
             parsingEnumsMap.clear();
         }
+        var allUnions = parsingUnionsMap.get("Unions");
+        boolean parseAllUnions = false;
+        if (allUnions != null) {
+            parseAllUnions = true;
+            parsingUnionsMap.clear();
+        }
         var topLevelEnumModel = new NativeMemoryModel(fileName);
         for (Declaration declaration : parsed.members()) {
-            var isDefinedInFile = declaration.pos().path().equals(Path.of(filePath));
-            if (!isDefinedInFile) {
+            if (!allParsingList.contains(declaration.name())) {
                 continue;
             }
+//            var isDefinedInFile = declaration.pos().path().equals(Path.of(filePath));
+//            if (!isDefinedInFile) {
+//                continue;
+//            }
             if (declaration instanceof Declaration.Scoped declarationScoped) {
                 switch (declarationScoped.kind()) {
                     case STRUCT -> {
@@ -117,7 +140,7 @@ public class Parser {
                         parseDeclaration(declarationScoped, nativeMemoryModel.getNodes());
                         var prettyName = getPrettyName(parsingStructsMap, declarationScoped);
                         writer.write("fileName: " + prettyName + "\n");
-                        writer.write(StructComposer.compose(nativeMemoryModel, packageName, prettyName, (structName) -> {
+                        writer.write(StructComposer.compose("struct", nativeMemoryModel, packageName, prettyName, (structName) -> {
                             if (parsingStructsMap.isEmpty()) {
                                 return structName;
                             }
@@ -148,6 +171,27 @@ public class Parser {
                         var prettyName = getPrettyName(parsingEnumsMap, declarationScoped);
                         writer.write("fileName: " + prettyName + "\n");
                         writer.write(EnumComposer.compose(nativeMemoryModel, packageName, prettyName));
+                        writer.write("===\n");
+                        writer.flush();
+                    }
+                    case UNION -> {
+                        if (!parsingUnionsMap.isEmpty()) {
+                            if (!parsingUnionsMap.containsKey(declarationScoped.name())) {
+                                continue;
+                            }
+                        } else if (!parseAllUnions) {
+                            continue;
+                        }
+                        var nativeMemoryModel = new NativeMemoryModel(fileName);
+                        parseDeclaration(declarationScoped, nativeMemoryModel.getNodes());
+                        var prettyName = getPrettyName(parsingUnionsMap, declarationScoped);
+                        writer.write("fileName: " + prettyName + "\n");
+                        writer.write(StructComposer.compose("union", nativeMemoryModel, packageName, prettyName, (structName) -> {
+                            if (parsingUnionsMap.isEmpty()) {
+                                return structName;
+                            }
+                            return parsingUnionsMap.get(structName);
+                        }));
                         writer.write("===\n");
                         writer.flush();
                     }

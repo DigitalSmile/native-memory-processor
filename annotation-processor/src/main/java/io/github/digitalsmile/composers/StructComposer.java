@@ -3,6 +3,7 @@ package io.github.digitalsmile.composers;
 import com.squareup.javapoet.*;
 import io.github.digitalsmile.parser.NativeMemoryModel;
 import io.github.digitalsmile.parser.NativeMemoryNode;
+import io.github.digitalsmile.parser.Parser;
 import io.github.digitalsmile.type.PrimitiveTypeMapping;
 import io.github.digitalsmile.type.TypeMapping;
 import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
@@ -32,7 +33,7 @@ public class StructComposer {
             new PrimitiveTypeMapping(Void, null)
     );
 
-    public static String compose(NativeMemoryModel nativeMemoryModel, String packageName, String prettyName, Function<String, String> lookupCallback) {
+    public static String compose(String type, NativeMemoryModel nativeMemoryModel, String packageName, String prettyName, Function<String, String> lookupCallback) {
         List<CodeBlock> memoryLayout = processMemoryLayout(nativeMemoryModel.getNodes(), lookupCallback);
         List<FieldSpec> constructorFields = processConstructorParameters(nativeMemoryModel.getNodes(), lookupCallback);
         List<FieldSpec> handlesFields = processHandleFields(nativeMemoryModel.getNodes(), null, lookupCallback);
@@ -41,7 +42,6 @@ public class StructComposer {
         List<CodeBlock> fromByesBodyStatements = processFromReturnStatements(nativeMemoryModel.getNodes(), false, lookupCallback);
         List<CodeBlock> toByesBodyStatements = processToBodyStatements(nativeMemoryModel.getNodes(), false, lookupCallback);
         List<CodeBlock> isEmptyReturnStatements = processIsEmptyReturnStatements(nativeMemoryModel.getNodes());
-
         var outputFile = JavaFile.builder(packageName,
                 TypeSpec.recordBuilder(prettyName)
                         .addModifiers(Modifier.PUBLIC)
@@ -50,7 +50,7 @@ public class StructComposer {
                         .addField(FieldSpec.builder(TypeName.get(MemoryLayout.class), "LAYOUT", Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
                                 .initializer(
                                         CodeBlock.builder()
-                                                .add("$T.structLayout(\n\t", MemoryLayout.class)
+                                                .add("$T.$LLayout(\n\t", MemoryLayout.class, type)
                                                 .add(CodeBlock.join(memoryLayout, ",\n\t"))
                                                 .add("\n)")
                                                 .build())
@@ -110,7 +110,7 @@ public class StructComposer {
                         CodeBlock.builder()
                                 .add("$T.unionLayout(\n\t\t", MemoryLayout.class)
                                 .add(CodeBlock.join(processMemoryLayout(node.getNodes(), lookupCallback), ",\n\t\t"))
-                                .add("\n\t).withName($S)", node.getName())
+                                .add("\n\t).withName($S)", node.getPrettyName())
                                 .build());
             } else {
                 switch (type) {
@@ -119,13 +119,13 @@ public class StructComposer {
                             var valueLayout = findType(typePrimitive.kind());
                             memoryLayouts.add(
                                     CodeBlock.builder().add("$T.sequenceLayout($L, $T.$L).withName($S)", MemoryLayout.class,
-                                                    typeArray.elementCount().orElseThrow(), ValueLayout.class, valueLayout.valueLayoutName(), node.getName())
+                                                    typeArray.elementCount().orElseThrow(), ValueLayout.class, valueLayout.valueLayoutName(), node.getPrettyName())
                                             .build());
                         } else if (typeArray.elementType() instanceof Type.Declared typeDeclared) {
                             var prettyName = lookupCallback.apply(typeDeclared.tree().name());
                             if (prettyName != null) {
                                 memoryLayouts.add(CodeBlock.builder().add("$T.sequenceLayout($L, $L.LAYOUT).withName($S)", MemoryLayout.class,
-                                                typeArray.elementCount().orElseThrow(), prettyName, node.getName())
+                                                typeArray.elementCount().orElseThrow(), prettyName, node.getPrettyName())
                                         .build());
                             } else {
                                 System.err.println("Struct '" + node.getName() + "' is not present in parsing queue. Please, explicitly add struct in annotation.");
@@ -136,12 +136,12 @@ public class StructComposer {
                     }
                     case Type.Primitive typePrimitive -> {
                         var valueLayout = findType(typePrimitive.kind());
-                        memoryLayouts.add(CodeBlock.builder().add("$T.$L.withName($S)", ValueLayout.class, valueLayout.valueLayoutName(), node.getName()).build());
+                        memoryLayouts.add(CodeBlock.builder().add("$T.$L.withName($S)", ValueLayout.class, valueLayout.valueLayoutName(), node.getPrettyName()).build());
                     }
                     case Type.Declared typeDeclared -> {
                         var prettyName = lookupCallback.apply(typeDeclared.tree().name());
                         if (prettyName != null) {
-                            memoryLayouts.add(CodeBlock.builder().add("$L.LAYOUT.withName($S)", prettyName, node.getName()).build());
+                            memoryLayouts.add(CodeBlock.builder().add("$L.LAYOUT.withName($S)", prettyName, node.getPrettyName()).build());
                         } else {
                             System.err.println("Struct '" + node.getName() + "' is not present in parsing queue. Please, explicitly add struct in annotation.");
                         }
@@ -243,7 +243,7 @@ public class StructComposer {
         for (NativeMemoryNode node : nodes) {
             var type = node.getType();
             if (type == null) {
-                fieldSpecs.addAll(processHandleFields(node.getNodes(), node.getName(), lookupCallback));
+                fieldSpecs.addAll(processHandleFields(node.getNodes(), node.getPrettyName(), lookupCallback));
             } else {
                 var layoutCodeBlock = nestedName != null ?
                         CodeBlock.builder().add("LAYOUT.select($T.groupElement($S))", MemoryLayout.PathElement.class, nestedName).build()
@@ -252,14 +252,14 @@ public class StructComposer {
                     case Type.Array array ->
                             fieldSpecs.add(FieldSpec.builder(TypeName.get(MethodHandle.class), "MH_" + node.getName().toUpperCase())
                                     .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-                                    .initializer("$L.sliceHandle(MemoryLayout.PathElement.groupElement($S))", layoutCodeBlock, node.getName())
+                                    .initializer("$L.sliceHandle(MemoryLayout.PathElement.groupElement($S))", layoutCodeBlock, node.getPrettyName())
                                     .build());
                     case Type.Declared typeDeclared -> {
                         var prettyName = lookupCallback.apply(typeDeclared.tree().name());
                         if (prettyName != null) {
                             fieldSpecs.add(FieldSpec.builder(TypeName.get(MethodHandle.class), "MH_" + node.getName().toUpperCase())
                                     .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-                                    .initializer("$L.sliceHandle(MemoryLayout.PathElement.groupElement($S))", layoutCodeBlock, node.getName())
+                                    .initializer("$L.sliceHandle(MemoryLayout.PathElement.groupElement($S))", layoutCodeBlock, node.getPrettyName())
                                     .build());
                         } else {
                             System.err.println("Struct '" + node.getName() + "' is not present in parsing queue. Please, explicitly add struct in annotation.");
@@ -268,7 +268,7 @@ public class StructComposer {
                     case Type.Primitive primitive ->
                             fieldSpecs.add(FieldSpec.builder(TypeName.get(VarHandle.class), "VH_" + node.getName().toUpperCase())
                                     .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-                                    .initializer("$L.varHandle(MemoryLayout.PathElement.groupElement($S))", layoutCodeBlock, node.getName())
+                                    .initializer("$L.varHandle(MemoryLayout.PathElement.groupElement($S))", layoutCodeBlock, node.getPrettyName())
                                     .build());
                     default -> System.err.println("Unknown type '" + type + "' for field '" + node.getName() + "'");
                 }
@@ -283,7 +283,7 @@ public class StructComposer {
             var type = node.getType();
             if (type == null) {
                 statements.add(CodeBlock.builder()
-                        .addStatement("var unionSize = LAYOUT.select($T.groupElement($S)).byteSize()", MemoryLayout.PathElement.class, node.getName())
+                        .addStatement("var unionSize = LAYOUT.select($T.groupElement($S)).byteSize()", MemoryLayout.PathElement.class, node.getPrettyName())
                         .addStatement("var unionBuffer = buffer.asSlice(LAYOUT.byteSize() - unionSize, unionSize)")
                         .build());
                 statements.addAll(processFromBodyStatements(node.getNodes(), lookupCallback));
@@ -375,7 +375,7 @@ public class StructComposer {
             var type = node.getType();
             if (type == null) {
                 statements.add(CodeBlock.builder()
-                        .addStatement("var unionSize = LAYOUT.select($T.groupElement($S)).byteSize()", MemoryLayout.PathElement.class, node.getName())
+                        .addStatement("var unionSize = LAYOUT.select($T.groupElement($S)).byteSize()", MemoryLayout.PathElement.class, node.getPrettyName())
                         .addStatement("var unionBuffer = buffer.asSlice(LAYOUT.byteSize() - unionSize, unionSize)")
                         .build());
                 statements.addAll(processToBodyStatements(node.getNodes(), true, lookupCallback));
@@ -439,7 +439,7 @@ public class StructComposer {
                             if (nested) {
                                 builder.add(CodeBlock.builder().beginControlFlow("if (!$L.isEmpty())", node.getPrettyName()).build());
                             }
-                            builder.addStatement("var $LTmp = invokeExact(MH_$L, buffer)", node.getPrettyName(), node.getName().toUpperCase())
+                            builder.addStatement("var $LTmp = invokeExact(MH_$L, buffer)", node.getPrettyName(), node.getPrettyName().toUpperCase())
                                     .addStatement("$L.toBytes($LTmp)", node.getPrettyName(), node.getPrettyName());
                             if (nested) {
                                 builder.add(CodeBlock.builder().endControlFlow().build());

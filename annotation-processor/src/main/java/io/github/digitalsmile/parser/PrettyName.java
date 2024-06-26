@@ -1,8 +1,11 @@
 package io.github.digitalsmile.parser;
 
+import javax.lang.model.SourceVersion;
+
 public class PrettyName {
     public static String get(String name) {
-        if (name.matches("([a-z]+[a-zA-Z0-9]+)+")) {
+        name = SourceVersion.isKeyword(name) ? "_" + name : name;
+        if (name.matches("([_a-z]+[a-zA-Z0-9]+)+")) {
             return name;
         }
         var words = name.split("[\\W_-]+");

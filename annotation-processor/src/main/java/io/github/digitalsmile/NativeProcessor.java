@@ -7,11 +7,10 @@ import io.github.digitalsmile.annotation.NativeMemory;
 import io.github.digitalsmile.annotation.NativeMemoryOptions;
 import io.github.digitalsmile.annotation.function.Function;
 import io.github.digitalsmile.annotation.function.NativeMemoryException;
+import io.github.digitalsmile.annotation.structure.*;
+import io.github.digitalsmile.annotation.structure.Enum;
 import io.github.digitalsmile.composers.FunctionComposer;
 import io.github.digitalsmile.parser.Parser;
-import io.github.digitalsmile.annotation.structure.Structs;
-import io.github.digitalsmile.annotation.structure.Enums;
-import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
@@ -26,11 +25,10 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.nio.channels.FileChannel;
-import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @SupportedSourceVersion(SourceVersion.RELEASE_22)
 public class NativeProcessor extends AbstractProcessor {
@@ -61,11 +59,29 @@ public class NativeProcessor extends AbstractProcessor {
         if (roundEnv.processingOver()) {
             return true;
         }
+        var allParsingList = roundEnv.getElementsAnnotatedWith(NativeMemory.class).stream()
+                .map(element -> {
+                    List<String> allDeclarations = new ArrayList<>();
+                    var structs = element.getAnnotation(Structs.class);
+                    if (structs != null && structs.value().length > 0) {
+                        allDeclarations.addAll(Arrays.stream(structs.value()).map(Struct::name).toList());
+                    }
+                    var enums = element.getAnnotation(Enums.class);
+                    if (enums != null && enums.value().length > 0) {
+                        allDeclarations.addAll(Arrays.stream(enums.value()).map(Enum::name).toList());
+                    }
+                    var unions = element.getAnnotation(Unions.class);
+                    if (unions != null && unions.value().length > 0) {
+                        allDeclarations.addAll(Arrays.stream(unions.value()).map(Union::name).toList());
+                    }
+                    return allDeclarations;
+                }).flatMap(List::stream).toList();
+
         for (Element rootElement : roundEnv.getElementsAnnotatedWith(NativeMemory.class)) {
             var nativeAnnotation = rootElement.getAnnotation(NativeMemory.class);
             var headerFile = nativeAnnotation.header();
             var packageName = processingEnv.getElementUtils().getPackageOf(rootElement).getQualifiedName().toString();
-            var processedTypeNames = processHeaderFile(rootElement, headerFile, packageName, nativeAnnotation.options());
+            var processedTypeNames = processHeaderFile(rootElement, headerFile, packageName, nativeAnnotation.options(), allParsingList);
             List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(Function.class)).stream()
                     .filter(f -> f.getEnclosingElement().equals(rootElement)).toList();
             Map<Library, Set<String>> libraries = new HashMap<>();
@@ -108,7 +124,7 @@ public class NativeProcessor extends AbstractProcessor {
         return true;
     }
 
-    private List<TypeVariableName> processHeaderFile(Element element, String headerFile, String packageName, NativeMemoryOptions options) {
+    private List<TypeVariableName> processHeaderFile(Element element, String headerFile, String packageName, NativeMemoryOptions options, List<String> allParsingList) {
         if (headerFile.isEmpty()) {
             return Collections.emptyList();
         }
@@ -119,6 +135,7 @@ public class NativeProcessor extends AbstractProcessor {
         }
 
         var structs = element.getAnnotation(Structs.class);
+        var unions = element.getAnnotation(Unions.class);
         var enums = element.getAnnotation(Enums.class);
 
         var properties = new Properties();
@@ -126,6 +143,7 @@ public class NativeProcessor extends AbstractProcessor {
         properties.put(ParsingOption.PACKAGE_NAME.getOption(), packageName);
         properties.put(ParsingOption.HEADER_FILE.getOption(), headerPath.toFile().getAbsolutePath());
         properties.put(ParsingOption.ROOT_ENUM_CREATION.getOption(), String.valueOf(options.generateRootEnum()));
+        properties.put(ParsingOption.ALL_PARSING_LIST.getOption(), String.join(",", allParsingList));
         if (structs != null) {
             if (structs.value().length > 0) {
                 Arrays.stream(structs.value()).forEach(struct -> properties.put("Structs." + struct.name(), struct.javaName()));
@@ -135,9 +153,16 @@ public class NativeProcessor extends AbstractProcessor {
         }
         if (enums != null) {
             if (enums.value().length > 0) {
-                Arrays.stream(enums.value()).forEach(struct -> properties.put("Enums." + struct.name(), struct.javaName()));
+                Arrays.stream(enums.value()).forEach(enoom -> properties.put("Enums." + enoom.name(), enoom.javaName()));
             } else {
                 properties.put("Enums", "All");
+            }
+        }
+        if (unions != null) {
+            if (unions.value().length > 0) {
+                Arrays.stream(unions.value()).forEach(union -> properties.put("Unions." + union.name(), union.javaName()));
+            } else {
+                properties.put("Unions", "All");
             }
         }
         List<TypeVariableName> processedTypeNames = new ArrayList<>();
@@ -145,7 +170,10 @@ public class NativeProcessor extends AbstractProcessor {
             var output = parse(properties);
             var files = output.split("===\n");
             for (String file : files) {
-                //processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, file);
+                if (file.isEmpty()) {
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, "Files are empty, uncaught error during parsing");
+                    return Collections.emptyList();
+                }
                 var fileName = file.substring(0, file.indexOf("\n")).replace("fileName: ", "");
                 file = file.substring(file.indexOf("\n") + 1);
                 createGeneratedFile(packageName, fileName, file);
@@ -155,6 +183,8 @@ public class NativeProcessor extends AbstractProcessor {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "I/O exception occurred while trying to parse header file: " + e.getMessage());
         } catch (InterruptedException e) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Parsing process did not complete: " + e.getMessage());
+        } catch (Throwable e) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
         }
         return processedTypeNames;
     }
