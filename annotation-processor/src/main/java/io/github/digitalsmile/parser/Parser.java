@@ -42,6 +42,7 @@ public class Parser {
             parsed = JextractTool.parse(Path.of(header));
         } catch (Throwable e) {
             sendError(e.getMessage());
+            sendError("Properties of this launch: " + properties);
             return;
         }
         var packageName = properties.getProperty(ParsingOption.PACKAGE_NAME.getOption());
@@ -120,6 +121,10 @@ public class Parser {
         var topLevelEnumModel = new NativeMemoryModel(fileName);
         for (Declaration declaration : parsed.members()) {
             if (!allParsingList.contains(declaration.name())) {
+                if (rootEnums && declaration instanceof Declaration.Constant declarationConstant) {
+                    var node = parseVariable(declaration, declarationConstant.name(), declarationConstant.type());
+                    topLevelEnumModel.addNode(new NativeMemoryNode(node.getName(), node.getType(), declarationConstant.value()));
+                }
                 continue;
             }
 //            var isDefinedInFile = declaration.pos().path().equals(Path.of(filePath));
@@ -198,10 +203,7 @@ public class Parser {
                     default -> sendWarning(declarationScoped, "unsupported declaration kind " + declarationScoped.kind());
                 }
             } else if (declaration instanceof Declaration.Constant declarationConstant) {
-                if (rootEnums) {
-                    var node = parseVariable(declaration, declarationConstant.name(), declarationConstant.type());
-                    topLevelEnumModel.addNode(new NativeMemoryNode(node.getName(), node.getType(), declarationConstant.value()));
-                }
+                sendWarning(declarationConstant, "unsupported declaration type " + declarationConstant.type());
             } else if (declaration instanceof Declaration.Variable declarationVariable) {
                 sendWarning(declarationVariable, "unsupported declaration type " + declarationVariable.type());
             } else if (declaration instanceof Declaration.Typedef declarationTypedef) {

@@ -5,7 +5,7 @@ import javax.lang.model.SourceVersion;
 public class PrettyName {
     public static String get(String name) {
         name = SourceVersion.isKeyword(name) ? "_" + name : name;
-        if (name.matches("([_a-z]+[a-zA-Z0-9]+)+")) {
+        if (name.matches("(_)*([a-z]+[a-zA-Z0-9]+)+")) {
             return name;
         }
         var words = name.split("[\\W_-]+");

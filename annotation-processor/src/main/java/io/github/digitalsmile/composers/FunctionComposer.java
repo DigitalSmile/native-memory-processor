@@ -6,9 +6,11 @@ import io.github.digitalsmile.annotation.function.*;
 import io.github.digitalsmile.type.ObjectTypeMapping;
 import io.github.digitalsmile.type.TypeMapping;
 import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
+import jdk.jshell.spi.ExecutionControl;
 
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.*;
+import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.MirroredTypeException;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
@@ -106,7 +108,11 @@ public class FunctionComposer {
                         if (generatedTypes == null) {
                             var methodRealTypes = method.getTypeParameters().stream().findFirst().orElse(null);
                             if (methodRealTypes == null) {
-                                messager.printMessage(Diagnostic.Kind.ERROR, "Parameter with object definition should extend NativeMemoryLayout interface", variableElement);
+                                if (variableType.carrierClass().equals(String.class)) {
+                                    returnElement = variableElement;
+                                } else {
+                                    messager.printMessage(Diagnostic.Kind.ERROR, "Parameter with object definition should extend NativeMemoryLayout interface", variableElement);
+                                }
                             } else {
                                 var boundsType = methodRealTypes.getBounds().stream().findFirst().orElse(null);
                                 if (boundsType == null || !boundsType.toString().equals(NativeMemoryLayout.class.getName())) {
@@ -149,7 +155,12 @@ public class FunctionComposer {
             var methodBody = CodeBlock.builder();
             for (VariableElement variableElement : byAddressElements) {
                 var elementType = findType(variableElement.asType(), processedTypeNames);
-                if (elementType.carrierClass().equals(NativeMemoryLayout.class) || elementType.carrierClass().equals(MemorySegment.class)) {
+                if (elementType.carrierClass().equals(String.class)) {
+                    methodBody.addStatement("var $LMemorySegment = offHeap.allocateFrom($L)", variableElement.getSimpleName(), variableElement.getSimpleName());
+                } else if (variableElement.asType() instanceof ArrayType) {
+                    methodBody.addStatement("var $LMemorySegment = offHeap.allocateFrom($T.$L, $L)", variableElement.getSimpleName(),
+                            ValueLayout.class, elementType.valueLayoutName(), variableElement.getSimpleName());
+                } else if (elementType.carrierClass().equals(NativeMemoryLayout.class) || elementType.carrierClass().equals(MemorySegment.class)) {
                     methodBody.addStatement("var $LMemorySegment = offHeap.allocate($L.getMemoryLayout())", variableElement.getSimpleName(), variableElement.getSimpleName());
                     methodBody.addStatement("$L.toBytes($LMemorySegment)", variableElement.getSimpleName(), variableElement.getSimpleName());
                 } else {
@@ -182,7 +193,11 @@ public class FunctionComposer {
             }
             if (returnElement != null) {
                 var elementType = findType(returnElement.asType(), processedTypeNames);
-                if (elementType.carrierClass().equals(NativeMemoryLayout.class)) {
+                if (elementType.carrierClass().equals(String.class)) {
+                    methodBody.addStatement("return $LMemorySegment.getString(0)", returnElement.getSimpleName());
+                } else if (returnElement.asType() instanceof ArrayType) {
+                    methodBody.addStatement("return $LMemorySegment.toArray($T.$L)", returnElement.getSimpleName(), ValueLayout.class, elementType.valueLayoutName());
+                } else if (elementType.carrierClass().equals(NativeMemoryLayout.class)) {
                     if (nativeReturnType.carrierClass().equals(NativeMemoryLayout.class)) {
                         var t = returnTypeMirror.toString().replace("<any?>.", "");
                         var processedType = processedTypeNames.stream().filter(processed -> processed.name.equals(t)).findFirst().orElse(null);
@@ -279,11 +294,15 @@ public class FunctionComposer {
     }
 
     private static TypeMapping findType(TypeMirror type, List<TypeVariableName> processedTypeNames) {
-        var foundType = PRIMITIVE_MAPPING.stream().filter(list -> {
-            return list.carrierClass().getSimpleName().equals(type.toString());
+        var foundType = PRIMITIVE_MAPPING.stream().filter(primitiveType -> {
+            return primitiveType.carrierClass().getSimpleName().equals(type.toString())
+                    || primitiveType.arrayClass().getSimpleName().equals(type.toString());
         }).findFirst().orElse(null);
         if (foundType == null) {
-            if (!type.toString().equals(void.class.getName())) {
+
+            if (type.toString().equals(String.class.getName())) {
+                foundType = new ObjectTypeMapping(String.class);
+            } else if (!type.toString().equals(void.class.getName())) {
                 foundType = new ObjectTypeMapping(NativeMemoryLayout.class);
             }
         }
