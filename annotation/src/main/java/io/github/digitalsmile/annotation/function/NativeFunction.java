@@ -43,7 +43,7 @@ public abstract class NativeFunction {
 
     protected void processError(MemorySegment capturedState, String method, Object... args) throws NativeMemoryException {
         try {
-            int errno = (int) ERRNO_HANDLE.get(capturedState);
+            int errno = (int) ERRNO_HANDLE.get(capturedState, 0L);
             if (errno > 0) {
                 var errnoStr = (MemorySegment) STR_ERROR.invokeExact(errno);
                 throw new NativeMemoryException("Error during call to method " + method + " with data '" + Arrays.toString(args) + "': " +
