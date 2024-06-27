@@ -40,6 +40,10 @@ public class Parser {
         Declaration.Scoped parsed;
         try {
             parsed = JextractTool.parse(Path.of(header));
+        } catch (ExceptionInInitializerError e) {
+            sendError(e.getException().getMessage());
+            sendError("Properties of this launch: " + properties);
+            return;
         } catch (Throwable e) {
             sendError(e.getMessage());
             sendError("Properties of this launch: " + properties);
@@ -200,7 +204,8 @@ public class Parser {
                         writer.write("===\n");
                         writer.flush();
                     }
-                    default -> sendWarning(declarationScoped, "unsupported declaration kind " + declarationScoped.kind());
+                    default ->
+                            sendWarning(declarationScoped, "unsupported declaration kind " + declarationScoped.kind());
                 }
             } else if (declaration instanceof Declaration.Constant declarationConstant) {
                 sendWarning(declarationConstant, "unsupported declaration type " + declarationConstant.type());
@@ -286,12 +291,15 @@ public class Parser {
     static void sendError(String message) {
         System.err.println("Error:" + message);
     }
+
     static void sendError(Declaration declaration, String message) {
         System.err.println("Error:" + format(declaration.pos().toString(), declaration.name(), message));
     }
+
     static void sendWarning(Declaration declaration, String message) {
         System.err.println("Warning:" + format(declaration.pos().toString(), declaration.name(), message));
     }
+
     static void sendDebug(String message) {
         System.err.println("Debug:" + message);
     }
