@@ -8,4 +8,8 @@ module io.github.digitalsmile.annotation {
     opens io.github.digitalsmile.annotation.function;
     // base NativeMemory annotation class
     opens io.github.digitalsmile.annotation;
+
+    exports io.github.digitalsmile.annotation;
+    exports io.github.digitalsmile.annotation.function;
+    exports io.github.digitalsmile.annotation.structure;
 }
