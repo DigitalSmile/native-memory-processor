@@ -30,6 +30,8 @@ jobs:
           distribution: 'corretto'
       - name: Install libclang
         run: sudo apt-get install -y libclang-dev
+      - name: Locate libclang
+        run: locate libclang.so
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
       - name: Setup Gradle
