@@ -4,6 +4,7 @@
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/digitalsmile/annotation/gradle.yml)
 ## Introduction
 With the release of JDK 22 the new Foreign Function & Memory API (FFM API) has been introduced from preview phase.
+
 This API is intended to substitute Java Native Interface (JNI) and become a standard of interacting with native code from Java.
 
 While FFM API itself is very powerful and can provide access to onheap/offheap memory regions and call a native function, it is lacking of extended features of converting C/C++ structures to Java classes.Of course, we have `jextract` tool, but the code it generates is kind of messy and hard to understand.
