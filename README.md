@@ -40,7 +40,8 @@ public interface GPIO {
 }
 ```
 This code snippet will generate all structures and enums within the header file `gpio.h` (located in `resources` folder), as well as `GPIONative` class with call implementation of `ioctl` native function.
-Find more examples in javadoc or in my other project https://github.com/digitalsmile/gpio
+Find more examples in javadoc or in my other project https://github.com/digitalsmile/gpio 
+
 5) Enjoy! :)
 ## Plans
 - more support of native C/C++ types and patterns
