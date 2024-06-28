@@ -20,6 +20,7 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
+import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -171,7 +172,8 @@ public class NativeProcessor extends AbstractProcessor {
             var files = output.split("===\n");
             for (String file : files) {
                 if (file.isEmpty()) {
-                    processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, "Files are empty, uncaught error during parsing");
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                            "Generated files are empty or uncaught error during parsing\nRun properties: " + properties);
                     return Collections.emptyList();
                 }
                 var fileName = file.substring(0, file.indexOf("\n")).replace("fileName: ", "");
@@ -189,7 +191,7 @@ public class NativeProcessor extends AbstractProcessor {
         return processedTypeNames;
     }
 
-
+    private FileObject tmpFile;
     private Path getHeaderPath(String headerFile) {
         Path headerPath;
         if (headerFile.startsWith("/")) {
@@ -197,12 +199,15 @@ public class NativeProcessor extends AbstractProcessor {
         } else {
             Path rootPath;
             try {
-                var resource = processingEnv.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", "tmp", (Element[]) null);
-                var rootDirectory = calculatePath(new File(resource.toUri()));
-                resource.delete();
+                if (tmpFile == null) {
+                    tmpFile = processingEnv.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", "tmp1", (Element[]) null);
+                }
+                var rootDirectory = calculatePath(new File(tmpFile.toUri()));
+                tmpFile.delete();
+
                 rootPath = rootDirectory.toPath();
             } catch (IOException e) {
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Cannot create tmp resource " + e.getMessage());
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Cannot create tmp resource " + e);
                 return Path.of("unknown");
             }
             headerPath = rootPath.resolve(headerFile);
@@ -238,11 +243,27 @@ public class NativeProcessor extends AbstractProcessor {
     }
 
     private String parse(Properties properties) throws IOException, InterruptedException {
+        var osType = OsCheck.getOperatingSystemType();
+        var libraryPath = "-Djava.library.path=";
+        if (osType.equals(OsCheck.OSType.MacOS)) {
+            var findBuilder = new ProcessBuilder("mdfind", "-name", "libclang.dylib");
+            var process = findBuilder.start();
+            var output = new String(process.getInputStream().readAllBytes());
+            process.waitFor();
+            var results = output.split("\n");
+            for (String line : results) {
+                if (!line.startsWith("/")) {
+                    continue;
+                }
+                libraryPath += Path.of(line).getParent().toAbsolutePath().toString();
+            }
+        }
         var javaHome = System.getProperty("java.home");
         var javaBin = javaHome + File.separator + "bin" + File.separator + "java";
         List<String> command = new ArrayList<>();
         command.add(javaBin);
         command.add("--enable-native-access=ALL-UNNAMED");
+        command.add(libraryPath);
         command.add("-cp");
         command.add(String.join(":",
                 NativeMemory.class.getProtectionDomain().getCodeSource().getLocation().getPath(),

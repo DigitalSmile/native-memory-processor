@@ -36,12 +36,15 @@ public class Parser {
         properties.load(System.in);
 
         var header = properties.getProperty(ParsingOption.HEADER_FILE.getOption());
-
         Declaration.Scoped parsed;
         try {
             parsed = JextractTool.parse(Path.of(header));
+        } catch (ExceptionInInitializerError e) {
+            sendError(e.getException().getMessage());
+            sendError("Properties of this launch: " + properties);
+            return;
         } catch (Throwable e) {
-            sendError(e.getMessage());
+            sendError(e.toString());
             sendError("Properties of this launch: " + properties);
             return;
         }

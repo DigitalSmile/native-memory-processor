@@ -5,8 +5,18 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * Options, used in context of current <code>NativeMemory</code> processing run.
+ */
 @Target(value = ElementType.ANNOTATION_TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface NativeMemoryOptions {
+    /**
+     * Defines if processor should generate the separate enum file with root <code>#defines</code> or
+     * constants in header file.
+     * The file name will be the same as interface name.
+     *
+     * @return true if it is needed to generate root enum file
+     */
     boolean generateRootEnum() default false;
 }
