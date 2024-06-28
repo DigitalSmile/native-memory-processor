@@ -28,6 +28,8 @@ jobs:
         with:
           java-version: '22'
           distribution: 'corretto'
+      - name: Install libclang
+        run: sudo apt-get install -y libclang-dev
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
       - name: Setup Gradle
