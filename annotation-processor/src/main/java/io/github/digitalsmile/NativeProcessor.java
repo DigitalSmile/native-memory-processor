@@ -257,6 +257,8 @@ public class NativeProcessor extends AbstractProcessor {
                 }
                 libraryPath += Path.of(line).getParent().toAbsolutePath().toString();
             }
+        } else if (osType.equals(OsCheck.OSType.Linux)) {
+            libraryPath += "/usr/lib/x86_64-linux-gnu/";
         }
         var javaHome = System.getProperty("java.home");
         var javaBin = javaHome + File.separator + "bin" + File.separator + "java";
