@@ -29,7 +29,7 @@ jobs:
           java-version: '22'
           distribution: 'corretto'
       - name: Install libclang
-        run: sudo apt-get install -y libclang-dev
+        run: sudo apt-get install -y libclang1
       - name: Locate libclang
         run: locate libclang.so
       - name: Change wrapper permissions
