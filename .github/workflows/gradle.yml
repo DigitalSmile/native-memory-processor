@@ -9,9 +9,9 @@ name: Java CI with Gradle
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ "main", "development" ]
+    branches: [ "master", "development" ]
 
 permissions:
   contents: read
@@ -28,6 +28,10 @@ jobs:
         with:
           java-version: '22'
           distribution: 'corretto'
+      - name: Install libclang
+        run: sudo apt-get install -y libclang1
+      - name: Create symlink
+        run: sudo ln -s /usr/lib/x86_64-linux-gnu/libclang-16.so.1 /usr/lib/x86_64-linux-gnu/libclang.so
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
       - name: Setup Gradle
