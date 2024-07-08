@@ -18,7 +18,7 @@ public class LibraryPath {
                 throw new IOException("Temp file " + path + "does not exists!");
             }
             var file = path.toFile();
-            file.deleteOnExit();
+            //file.deleteOnExit();
             try (var out = new FileOutputStream(file)) {
                 int count;
                 byte[] buf = new byte[16 * 1024];

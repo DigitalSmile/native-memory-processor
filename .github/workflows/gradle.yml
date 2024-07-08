@@ -36,3 +36,5 @@ jobs:
       - name: Build Gradle
         run: |
           ./gradlew build -DheaderVersion=$headerVersion
+      - name: test
+        run: ls -lah /tmp/libclang.so-*
