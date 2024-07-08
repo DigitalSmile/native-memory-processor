@@ -28,11 +28,13 @@ jobs:
         with:
           java-version: '22'
           distribution: 'corretto'
-      - name: Install headers for test
-        run: sudo apt-get install -y linux-libc-dev
+      - name: Getting linux header version for tests
+        run: |
+          echo "headerVersion=$(uname -r)" >> "$GITHUB_ENV"
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
       - name: Build Gradle
-        run: ./gradlew build
+        run: |
+          ./gradlew build :annotation-processor-test:build -DheaderVersion=$headerVersion
