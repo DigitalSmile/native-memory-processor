@@ -93,6 +93,7 @@ public class NativeProcessor extends AbstractProcessor {
                 processFunctions(rootElement, functionElements, packageName);
 
             } catch (Throwable e) {
+                e.printStackTrace();
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
             }
         }
@@ -157,6 +158,7 @@ public class NativeProcessor extends AbstractProcessor {
                 var parsed = JextractTool.parse(Path.of(header.toFile().getAbsolutePath()), includes);
                 allParsedHeaders.put(header, parsed);
             } catch (ExceptionInInitializerError | ClangException | TypeLayoutError | Index.ParsingFailedException e) {
+                e.printStackTrace();
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
                 return;
             }
@@ -176,6 +178,7 @@ public class NativeProcessor extends AbstractProcessor {
                 }
             }
         } catch (Throwable e) {
+            e.printStackTrace();
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
         }
     }
@@ -276,6 +279,7 @@ public class NativeProcessor extends AbstractProcessor {
 
                     rootPath = rootDirectory.toPath();
                 } catch (IOException e) {
+                    e.printStackTrace();
                     processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Cannot create tmp resource " + e);
                     continue;
                 }
@@ -306,6 +310,7 @@ public class NativeProcessor extends AbstractProcessor {
             writer.write(contents);
             writer.close();
         } catch (IOException e) {
+            e.printStackTrace();
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Exception occurred while processing file '" + fileName + "': " + e.getMessage());
         }
     }
