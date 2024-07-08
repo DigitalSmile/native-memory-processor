@@ -159,11 +159,12 @@ public class NativeProcessor extends AbstractProcessor {
                 allParsedHeaders.put(header, parsed);
             } catch (ExceptionInInitializerError | ClangException | TypeLayoutError | Index.ParsingFailedException e) {
                 e.printStackTrace();
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getCause().getMessage());
                 return;
             }
         }
-
+        //  /tmp/libclang.so-5383561861285695138
+        //  /tmp/libclang.so-5383561861285695138
         var parser = new Parser(processingEnv.getMessager());
         try {
             var parsed = parser.parse(structs, enums, unions, allParsedHeaders);
