@@ -1,7 +1,8 @@
 # Java Native Memory Processing
 ![](https://img.shields.io/badge/Java-22+-success)
-![Maven Central Version](https://img.shields.io/maven-central/v/io.github.digitalsmile.native/annotation?color=blue&link=https%3A%2F%2Fcentral.sonatype.com%2Fartifact%2Fio.github.digitalsmile.native%2Fannotation)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/digitalsmile/annotation/gradle.yml)
+![Maven Central Version](https://img.shields.io/maven-central/v/io.github.digitalsmile.native/annotation?label=annotation)
+![Maven Central Version](https://img.shields.io/maven-central/v/io.github.digitalsmile.native/annotation-processor?label=annotation-processor)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/digitalsmile/native-memory-processor/gradle.yml)
 ## Introduction
 With the release of JDK 22 the new Foreign Function & Memory API (FFM API) has been introduced from preview phase.
 
