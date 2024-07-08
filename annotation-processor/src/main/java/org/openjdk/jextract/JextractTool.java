@@ -43,12 +43,7 @@ public final class JextractTool {
      * Parse input files into a toplevel declaration with given options.
      * @return a toplevel declaration.
      */
-    public static Declaration.Scoped parse(Path header) {
-        //Path source = /*headers.size() > 1? generateTmpSource(headers) : */ headers.iterator().next();
-        return new Parser().parse(header, Collections.emptyList());
-    }
-
-    public static void main(String[] args) {
-        var path = Path.of(args[0]);
+    public static Declaration.Scoped parse(Path header, List<String> options) {
+        return new Parser().parse(header, options);
     }
 }

@@ -1,57 +1,61 @@
 package io.github.digitalsmile.composers;
 
+import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.TypeSpec;
-import io.github.digitalsmile.parser.NativeMemoryModel;
-import io.github.digitalsmile.parser.NativeMemoryNode;
-import io.github.digitalsmile.type.TypeMapping;
-import org.openjdk.jextract.Type;
+import io.github.digitalsmile.headers.mapping.PrimitiveTypeMapping;
+import io.github.digitalsmile.headers.model.NativeMemoryNode;
 
+import javax.annotation.processing.Messager;
 import javax.lang.model.element.Modifier;
 
-import static io.github.digitalsmile.composers.StructComposer.PRIMITIVE_MAPPING;
-
 public class EnumComposer {
+    private final Messager messager;
 
-    public static String compose(NativeMemoryModel nativeMemoryModel, String packageName, String prettyName) {
-        var enumBuilder = TypeSpec.enumBuilder(prettyName)
-                .addModifiers(Modifier.PUBLIC);
-        TypeMapping primitiveMapping = null;
-        for (NativeMemoryNode node : nativeMemoryModel.getNodes()) {
-            if (node.getType() instanceof Type.Primitive typePrimitive) {
-                if (primitiveMapping == null) {
-                    primitiveMapping = findTypeByValueClass(node.getValue().getClass());
-                }
-                enumBuilder.addEnumConstant(node.getName(), TypeSpec.anonymousClassBuilder("$LL", node.getValue()).build());
-            } else {
-                System.err.println(node.getName() + ": only primitive types are allowed in enum");
-            }
-        }
-
-        var outputFile = JavaFile.builder(packageName,
-                enumBuilder
-                        .addField(primitiveMapping.carrierClass(), "value", Modifier.PRIVATE, Modifier.FINAL)
-                        .addMethod(MethodSpec.constructorBuilder()
-                                .addParameter(primitiveMapping.carrierClass(), "value")
-                                .addStatement("this.$N = $N", "value", "value")
-                                .build())
-                        .build()
-        ).indent("\t").skipJavaLangImports(true).build();
-        return outputFile.toString();
+    public EnumComposer(Messager messager) {
+        this.messager = messager;
     }
 
-    private static TypeMapping findTypeByValueClass(Class<?> clazz) {
-        Object primitiveType;
-        try {
-            primitiveType = clazz.getField("TYPE").get(null);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchFieldException e) {
-            throw new RuntimeException(e);
+    public String compose(String packageName, String prettyName, NativeMemoryNode parentNode) {
+        var sameTypes = parentNode.nodes().stream()
+                .map(p -> p.getType().typeName())
+                .allMatch(parentNode.nodes().getFirst().getType().typeName()::equals);
+        if (!sameTypes) {
+            var classBuilder = TypeSpec.classBuilder(prettyName)
+                    .addModifiers(Modifier.PUBLIC)
+                    .addJavadoc("Source: $L", parentNode.getSource());
+            for (NativeMemoryNode node : parentNode.nodes()) {
+                var type = (PrimitiveTypeMapping) node.getType().typeMapping();
+                var fieldSpec = FieldSpec.builder(type.valueLayout().carrier(), node.getName(), Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
+                        .initializer("$L$L", node.getValue(), type.literal())
+                        .addJavadoc("Source: $L", node.getSource())
+                        .build();
+                classBuilder.addField(fieldSpec);
+            }
+            var outputFile = JavaFile.builder(packageName, classBuilder.build()).indent("\t").skipJavaLangImports(true).build();
+            return outputFile.toString();
+        } else {
+            var type = (PrimitiveTypeMapping) parentNode.nodes().getFirst().getType().typeMapping();
+            var enumBuilder = TypeSpec.enumBuilder(prettyName)
+                    .addModifiers(Modifier.PUBLIC)
+                    .addJavadoc("Source: $L", parentNode.getSource());
+            for (NativeMemoryNode node : parentNode.nodes()) {
+                enumBuilder.addEnumConstant(node.getName(),
+                        TypeSpec.anonymousClassBuilder("$L", node.getValue())
+                                .addJavadoc("Source: $L", node.getSource())
+                                .build());
+            }
+            var outputFile = JavaFile.builder(packageName,
+                    enumBuilder
+                            .addField(type.valueLayout().carrier(), "value", Modifier.PRIVATE, Modifier.FINAL)
+                            .addMethod(MethodSpec.constructorBuilder()
+                                    .addParameter(type.valueLayout().carrier(), "value")
+                                    .addStatement("this.$N = $N", "value", "value")
+                                    .build())
+                            .build()
+            ).indent("\t").skipJavaLangImports(true).build();
+            return outputFile.toString();
         }
-        return PRIMITIVE_MAPPING.stream().filter(list -> {
-            return list.carrierClass().equals(primitiveType);
-        }).findFirst().orElseThrow();
     }
 }

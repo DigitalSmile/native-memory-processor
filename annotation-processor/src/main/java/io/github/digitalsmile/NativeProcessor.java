@@ -1,16 +1,33 @@
 package io.github.digitalsmile;
 
 
-import com.squareup.javapoet.JavaFile;
-import com.squareup.javapoet.TypeVariableName;
+import io.avaje.prism.GeneratePrism;
 import io.github.digitalsmile.annotation.NativeMemory;
 import io.github.digitalsmile.annotation.NativeMemoryOptions;
+import io.github.digitalsmile.annotation.function.ByAddress;
 import io.github.digitalsmile.annotation.function.Function;
 import io.github.digitalsmile.annotation.function.NativeMemoryException;
-import io.github.digitalsmile.annotation.structure.*;
-import io.github.digitalsmile.annotation.structure.Enum;
+import io.github.digitalsmile.annotation.function.Returns;
+import io.github.digitalsmile.annotation.structure.Enums;
+import io.github.digitalsmile.annotation.structure.Structs;
+import io.github.digitalsmile.annotation.structure.Unions;
+import io.github.digitalsmile.composers.EnumComposer;
 import io.github.digitalsmile.composers.FunctionComposer;
-import io.github.digitalsmile.parser.Parser;
+import io.github.digitalsmile.composers.StructComposer;
+import io.github.digitalsmile.functions.FunctionNode;
+import io.github.digitalsmile.functions.ParameterNode;
+import io.github.digitalsmile.headers.mapping.ObjectTypeMapping;
+import io.github.digitalsmile.headers.model.NativeMemoryModel;
+import io.github.digitalsmile.headers.model.NativeMemoryNode;
+import io.github.digitalsmile.headers.type.ObjectOriginalType;
+import io.github.digitalsmile.headers.type.ObjectTypeMirror;
+import io.github.digitalsmile.headers.type.OriginalType;
+import io.github.digitalsmile.headers.Parser;
+import org.openjdk.jextract.Declaration;
+import org.openjdk.jextract.JextractTool;
+import org.openjdk.jextract.clang.Index;
+import org.openjdk.jextract.clang.TypeLayoutError;
+import org.openjdk.jextract.impl.ClangException;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
@@ -19,28 +36,27 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
+@GeneratePrism(Function.class)
 @SupportedSourceVersion(SourceVersion.RELEASE_22)
 public class NativeProcessor extends AbstractProcessor {
 
     @Override
     public Set<String> getSupportedAnnotationTypes() {
-        return Set.of(NativeMemory.class.getName(), Function.class.getName());
+        return Set.of(NativeMemory.class.getName());
     }
 
 
-    public record Library(String libraryName, boolean isAlreadyLoaded, Element element) {
+    public record Library(String libraryName, boolean isAlreadyLoaded) {
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -60,164 +76,218 @@ public class NativeProcessor extends AbstractProcessor {
         if (roundEnv.processingOver()) {
             return true;
         }
-        var allParsingList = roundEnv.getElementsAnnotatedWith(NativeMemory.class).stream()
-                .map(element -> {
-                    List<String> allDeclarations = new ArrayList<>();
-                    var structs = element.getAnnotation(Structs.class);
-                    if (structs != null && structs.value().length > 0) {
-                        allDeclarations.addAll(Arrays.stream(structs.value()).map(Struct::name).toList());
-                    }
-                    var enums = element.getAnnotation(Enums.class);
-                    if (enums != null && enums.value().length > 0) {
-                        allDeclarations.addAll(Arrays.stream(enums.value()).map(Enum::name).toList());
-                    }
-                    var unions = element.getAnnotation(Unions.class);
-                    if (unions != null && unions.value().length > 0) {
-                        allDeclarations.addAll(Arrays.stream(unions.value()).map(Union::name).toList());
-                    }
-                    return allDeclarations;
-                }).flatMap(List::stream).toList();
-
         for (Element rootElement : roundEnv.getElementsAnnotatedWith(NativeMemory.class)) {
-            var nativeAnnotation = rootElement.getAnnotation(NativeMemory.class);
-            var headerFile = nativeAnnotation.header();
-            var packageName = processingEnv.getElementUtils().getPackageOf(rootElement).getQualifiedName().toString();
-            var processedTypeNames = processHeaderFile(rootElement, headerFile, packageName, nativeAnnotation.options(), allParsingList);
-            List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(Function.class)).stream()
-                    .filter(f -> f.getEnclosingElement().equals(rootElement)).toList();
-            Map<Library, Set<String>> libraries = new HashMap<>();
-            for (Element functionElement : functionElements) {
-                var function = functionElement.getAnnotation(Function.class);
-                var library = new Library(function.library(), function.isAlreadyLoaded(), functionElement);
-                var functions = libraries.getOrDefault(library, new HashSet<>());
-                functions.add(function.name());
-                libraries.putIfAbsent(library, functions);
-                if (functionElement instanceof ExecutableElement functionParsedElement) {
-                    var t = processingEnv.getElementUtils().getTypeElement(NativeMemoryException.class.getName()).asType();
-                    if (!functionParsedElement.getThrownTypes().contains(t)) {
-                        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Method '" + functionParsedElement + "' must throw NativeMemoryException!", functionParsedElement);
-                        return false;
-                    }
+            try {
+                var nativeAnnotation = rootElement.getAnnotation(NativeMemory.class);
+                var nativeOptions = rootElement.getAnnotation(NativeMemoryOptions.class);
+                var headerFiles = nativeAnnotation.headers();
+                var packageName = processingEnv.getElementUtils().getPackageOf(rootElement).getQualifiedName().toString();
+                if (nativeOptions != null && !nativeOptions.packageName().isEmpty()) {
+                    packageName = nativeOptions.packageName();
                 }
-            }
-            for (Library libraryOuter : libraries.keySet()) {
-                for (Library libraryInner : libraries.keySet()) {
-                    if (libraryOuter.libraryName.equals(libraryInner.libraryName) && libraryOuter.isAlreadyLoaded != libraryInner.isAlreadyLoaded) {
-                        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Library '" + libraryInner.libraryName + "' cannot be declared with different 'isAlreadyLoaded' option", libraryInner.element);
-                        return false;
-                    }
-                }
-            }
-            //processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, libraries.toString());
-            if (!functionElements.isEmpty()) {
-                var javaName = rootElement.getSimpleName().toString();
-                try {
-                    var contents = FunctionComposer.compose(packageName, javaName, functionElements, libraries, processingEnv.getMessager(), processedTypeNames);
-                    createGeneratedFile(packageName, javaName, "Native", contents);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.toString());
-                }
+
+                processHeaderFiles(rootElement, headerFiles, packageName, nativeOptions);
+
+                List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(Function.class)).stream()
+                        .filter(f -> f.getEnclosingElement().equals(rootElement)).toList();
+                processFunctions(rootElement, functionElements, packageName);
+
+            } catch (Throwable e) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
             }
         }
-
-
         return true;
     }
 
-    private List<TypeVariableName> processHeaderFile(Element element, String headerFile, String packageName, NativeMemoryOptions options, List<String> allParsingList) {
-        if (headerFile.isEmpty()) {
-            return Collections.emptyList();
+    public record Type(String name, String javaName) {
+    }
+
+    private void processHeaderFiles(Element element, String[] headerFiles, String packageName, NativeMemoryOptions options) {
+        if (headerFiles.length == 0) {
+            return;
         }
-        Path headerPath = getHeaderPath(headerFile);
-        if (!headerPath.toFile().exists()) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Cannot find header file '" + headerFile + "' annotated in class '" + element + "'!");
-            return Collections.emptyList();
-        }
-
-        var structs = element.getAnnotation(Structs.class);
-        var unions = element.getAnnotation(Unions.class);
-        var enums = element.getAnnotation(Enums.class);
-
-        var properties = new Properties();
-
-        properties.put(ParsingOption.PACKAGE_NAME.getOption(), packageName);
-        properties.put(ParsingOption.HEADER_FILE.getOption(), headerPath.toFile().getAbsolutePath());
-        properties.put(ParsingOption.ROOT_ENUM_CREATION.getOption(), String.valueOf(options.generateRootEnum()));
-        properties.put(ParsingOption.ALL_PARSING_LIST.getOption(), String.join(",", allParsingList));
-        if (structs != null) {
-            if (structs.value().length > 0) {
-                Arrays.stream(structs.value()).forEach(struct -> properties.put("Structs." + struct.name(), struct.javaName()));
-            } else {
-                properties.put("Structs", "All");
+        List<Path> headerPaths = getHeaderPaths(headerFiles);
+        for (Path path : headerPaths) {
+            if (!path.toFile().exists()) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, "Cannot find header file '" + path + "'!", element);
+                return;
             }
         }
-        if (enums != null) {
-            if (enums.value().length > 0) {
-                Arrays.stream(enums.value()).forEach(enoom -> properties.put("Enums." + enoom.name(), enoom.javaName()));
-            } else {
-                properties.put("Enums", "All");
+
+        var structsAnnotation = element.getAnnotation(Structs.class);
+        var unionsAnnotation = element.getAnnotation(Unions.class);
+        var enumsAnnotation = element.getAnnotation(Enums.class);
+
+        List<Type> structs = null;
+        if (structsAnnotation != null) {
+            structs = Arrays.stream(structsAnnotation.value()).map(struct -> new Type(struct.name(), struct.javaName())).toList();
+            Arrays.stream(structsAnnotation.value()).forEach(struct -> {
+                PrettyName.addName(struct.name(), struct.javaName());
+                OriginalType.register(new ObjectTypeMapping(struct.name()));
+            });
+        }
+        List<Type> enums = null;
+        if (enumsAnnotation != null) {
+            enums = Arrays.stream(enumsAnnotation.value()).map(enoom -> new Type(enoom.name(), enoom.javaName())).toList();
+            Arrays.stream(enumsAnnotation.value()).forEach(enoom -> {
+                PrettyName.addName(enoom.name(), enoom.javaName());
+                OriginalType.register(new ObjectTypeMapping(enoom.name()));
+            });
+        }
+        List<Type> unions = null;
+        if (unionsAnnotation != null) {
+            unions = Arrays.stream(unionsAnnotation.value()).map(union -> new Type(union.name(), union.javaName())).toList();
+            Arrays.stream(unionsAnnotation.value()).forEach(union -> {
+                PrettyName.addName(union.name(), union.javaName());
+                OriginalType.register(new ObjectTypeMapping(union.name()));
+            });
+        }
+
+        boolean rootConstants = false;
+        List<String> includes = Collections.emptyList();
+        if (options != null) {
+            rootConstants = options.processRootConstants();
+            includes = Arrays.stream(options.includes()).map(p -> "-I" + p).toList();
+        }
+
+        Map<Path, Declaration.Scoped> allParsedHeaders = new HashMap<>();
+
+        for (Path header : headerPaths) {
+            try {
+                var parsed = JextractTool.parse(Path.of(header.toFile().getAbsolutePath()), includes);
+                allParsedHeaders.put(header, parsed);
+            } catch (ExceptionInInitializerError | ClangException | TypeLayoutError | Index.ParsingFailedException e) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+                return;
             }
         }
-        if (unions != null) {
-            if (unions.value().length > 0) {
-                Arrays.stream(unions.value()).forEach(union -> properties.put("Unions." + union.name(), union.javaName()));
-            } else {
-                properties.put("Unions", "All");
-            }
-        }
-        List<TypeVariableName> processedTypeNames = new ArrayList<>();
+
+        var parser = new Parser(processingEnv.getMessager());
         try {
-            var output = parse(properties);
-            var files = output.split("===\n");
-            for (String file : files) {
-                if (file.isEmpty()) {
-                    processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
-                            "Generated files are empty or uncaught error during parsing\nRun properties: " + properties);
-                    return Collections.emptyList();
+            var parsed = parser.parse(structs, enums, unions, allParsedHeaders);
+            for (NativeMemoryModel model : parsed) {
+                for (Map.Entry<Declaration.Scoped.Kind, List<NativeMemoryNode>> entry : model.nodes().entrySet()) {
+                    var kind = entry.getKey();
+                    switch (kind) {
+                        case STRUCT -> processStructs(packageName, entry.getValue());
+                        case ENUM -> processEnums(packageName, entry.getValue(), rootConstants);
+                        case UNION -> processUnions(packageName, entry.getValue());
+                    }
                 }
-                var fileName = file.substring(0, file.indexOf("\n")).replace("fileName: ", "");
-                file = file.substring(file.indexOf("\n") + 1);
-                createGeneratedFile(packageName, fileName, file);
-                processedTypeNames.add(TypeVariableName.get(fileName, TypeVariableName.get(NativeMemoryLayout.class)));
             }
-        } catch (IOException e) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "I/O exception occurred while trying to parse header file: " + e.getMessage());
-        } catch (InterruptedException e) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Parsing process did not complete: " + e.getMessage());
         } catch (Throwable e) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
         }
-        return processedTypeNames;
+    }
+
+    private void processStructs(String packageName, List<NativeMemoryNode> nodes) {
+        for (NativeMemoryNode node : nodes) {
+            var structComposer = new StructComposer(processingEnv.getMessager());
+            var output = structComposer.compose(packageName, PrettyName.getObjectName(node.getName()), node);
+            createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
+        }
+    }
+
+    private void processEnums(String packageName, List<NativeMemoryNode> nodes, boolean rootConstants) {
+        for (NativeMemoryNode node : nodes) {
+            if (node.getName().contains("Constants")) {
+                if (!rootConstants) {
+                    continue;
+                }
+            }
+            var enumComposer = new EnumComposer(processingEnv.getMessager());
+            var output = enumComposer.compose(packageName, PrettyName.getObjectName(node.getName()), node);
+            createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
+        }
+    }
+
+    private void processUnions(String packageName, List<NativeMemoryNode> nodes) {
+        for (NativeMemoryNode node : nodes) {
+            var structComposer = new StructComposer(processingEnv.getMessager());
+            var output = structComposer.compose(packageName, PrettyName.getObjectName(node.getName()), node);
+            createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
+        }
+    }
+
+    private void processFunctions(Element rootElement, List<Element> functionElements, String packageName) {
+        Map<Library, List<FunctionNode>> libraries = new HashMap<>();
+        Map<String, Boolean> loadedLibraries = new HashMap<>();
+        Map<FunctionNode, ExecutableElement> methodMap = new HashMap<>();
+        for (Element element : functionElements) {
+            if (!(element instanceof ExecutableElement functionElement)) {
+                continue;
+            }
+            var throwType = processingEnv.getElementUtils().getTypeElement(NativeMemoryException.class.getName()).asType();
+            if (!functionElement.getThrownTypes().contains(throwType)) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Method '" + functionElement + "' must throw NativeMemoryException!", functionElement);
+                break;
+            }
+            var instance = FunctionPrism.getInstanceOn(functionElement);
+            if (instance == null) {
+                break;
+            }
+            var loadedLibrary = loadedLibraries.computeIfAbsent(instance.library(), _ -> instance.isAlreadyLoaded());
+            if (!loadedLibrary.equals(instance.isAlreadyLoaded())) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Library '" + instance.library() + "' cannot be declared with different 'isAlreadyLoaded' option", functionElement);
+                break;
+            }
+            List<ParameterNode> parameters = new ArrayList<>();
+            var returnType = OriginalType.of(functionElement.getReturnType());
+            var nativeReturnType = OriginalType.of(instance.returnType() != null ? instance.returnType() : new ObjectTypeMirror());
+            for (VariableElement variableElement : functionElement.getParameters()) {
+                var returns = variableElement.getAnnotation(Returns.class);
+                var byAddress = variableElement.getAnnotation(ByAddress.class);
+                var type = OriginalType.of(variableElement.asType());
+                var parameterNode = new ParameterNode(variableElement.getSimpleName().toString(),
+                        type, returns != null, byAddress != null || type instanceof ObjectOriginalType);
+                parameters.add(parameterNode);
+            }
+
+            var functionNode = new FunctionNode(instance.name(), nativeReturnType, returnType, parameters, instance.useErrno());
+            var library = new Library(instance.library(), instance.isAlreadyLoaded());
+            libraries.computeIfAbsent(library, _ -> new ArrayList<>()).add(functionNode);
+            methodMap.put(functionNode, functionElement);
+        }
+        var functionComposer = new FunctionComposer(processingEnv.getMessager());
+
+        var nativeClassJavaName = PrettyName.getObjectName(rootElement.getSimpleName().toString() + "Native");
+        var originalJavaName = PrettyName.getObjectName(rootElement.getSimpleName().toString());
+        var output = functionComposer.compose(packageName, originalJavaName, nativeClassJavaName, methodMap, libraries);
+        createGeneratedFile(packageName, nativeClassJavaName, output);
     }
 
     private FileObject tmpFile;
-    private Path getHeaderPath(String headerFile) {
-        Path headerPath;
-        if (headerFile.startsWith("/")) {
-            headerPath = Path.of(headerFile);
-        } else {
-            Path rootPath;
-            try {
-                if (tmpFile == null) {
-                    tmpFile = processingEnv.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", "tmp1", (Element[]) null);
-                }
-                var rootDirectory = calculatePath(new File(tmpFile.toUri()));
-                tmpFile.delete();
 
-                rootPath = rootDirectory.toPath();
-            } catch (IOException e) {
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Cannot create tmp resource " + e);
-                return Path.of("unknown");
+    private List<Path> getHeaderPaths(String[] headerFiles) {
+        List<Path> paths = new ArrayList<>();
+        for (String headerFile : headerFiles) {
+            Path headerPath;
+            if (headerFile.startsWith("/")) {
+                headerPath = Path.of(headerFile);
+            } else {
+                Path rootPath;
+                try {
+                    if (tmpFile == null) {
+                        tmpFile = processingEnv.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", "tmp", (Element[]) null);
+                    }
+                    var rootDirectory = calculatePath(new File(tmpFile.toUri()));
+                    tmpFile.delete();
+
+                    rootPath = rootDirectory.toPath();
+                } catch (IOException e) {
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Cannot create tmp resource " + e);
+                    continue;
+                }
+                headerPath = rootPath.resolve(headerFile);
+                if (!headerPath.toFile().exists()) {
+                    var main = rootPath.resolve("src", "main");
+                    var headerFileSplit = headerFile.split(Pattern.quote(File.separator));
+                    headerPath = main.resolve("resources", headerFileSplit);
+                }
             }
-            headerPath = rootPath.resolve(headerFile);
-            if (!headerPath.toFile().exists()) {
-                var main = rootPath.resolve("src", "main");
-                var headerFileSplit = headerFile.split(Pattern.quote(File.separator));
-                headerPath = main.resolve("resources", headerFileSplit);
-            }
+            paths.add(headerPath);
         }
-        return headerPath;
+        return paths;
     }
 
     private File calculatePath(File directory) {
@@ -227,78 +297,15 @@ public class NativeProcessor extends AbstractProcessor {
         return calculatePath(directory.getParentFile());
     }
 
-    private void createGeneratedFile(String packageName, String fileName, String suffix, String contents) {
+
+    private void createGeneratedFile(String packageName, String fileName, String contents) {
         try {
-            var generatedFile = processingEnv.getFiler().createSourceFile(packageName + "." + fileName + suffix);
+            var generatedFile = processingEnv.getFiler().createSourceFile(packageName + "." + fileName);
             var writer = generatedFile.openWriter();
             writer.write(contents);
             writer.close();
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Exception occurred while processing file '" + fileName + "': " + e.getMessage());
         }
-    }
-
-    private void createGeneratedFile(String packageName, String fileName, String contents) {
-        createGeneratedFile(packageName, fileName, "", contents);
-    }
-
-    private String parse(Properties properties) throws IOException, InterruptedException {
-        var osType = OsCheck.getOperatingSystemType();
-        var libraryPath = "-Djava.library.path=";
-        if (osType.equals(OsCheck.OSType.MacOS)) {
-            var findBuilder = new ProcessBuilder("mdfind", "-name", "libclang.dylib");
-            var process = findBuilder.start();
-            var output = new String(process.getInputStream().readAllBytes());
-            process.waitFor();
-            var results = output.split("\n");
-            for (String line : results) {
-                if (!line.startsWith("/")) {
-                    continue;
-                }
-                libraryPath += Path.of(line).getParent().toAbsolutePath().toString();
-            }
-        } else if (osType.equals(OsCheck.OSType.Linux)) {
-            libraryPath += "/usr/lib/x86_64-linux-gnu/";
-        }
-        var javaHome = System.getProperty("java.home");
-        var javaBin = javaHome + File.separator + "bin" + File.separator + "java";
-        List<String> command = new ArrayList<>();
-        command.add(javaBin);
-        command.add("--enable-native-access=ALL-UNNAMED");
-        command.add(libraryPath);
-        command.add("-cp");
-        command.add(String.join(":",
-                NativeMemory.class.getProtectionDomain().getCodeSource().getLocation().getPath(),
-                Parser.class.getProtectionDomain().getCodeSource().getLocation().getPath(),
-                JavaFile.class.getProtectionDomain().getCodeSource().getLocation().getPath()
-        ));
-        command.add(Parser.class.getName());
-
-        var builder = new ProcessBuilder(command);
-        var process = builder.start();
-        var writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-        properties.store(writer, "");
-        writer.flush();
-        writer.close();
-        var output = new String(process.getInputStream().readAllBytes());
-        var messages = new String(process.getErrorStream().readAllBytes());
-        process.waitFor();
-
-        if (!messages.isEmpty()) {
-            var message = messages.split("\n");
-            for (String line : message) {
-                if (line.startsWith("Error:")) {
-                    line = line.replace("Error:", "");
-                    processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, line);
-                } else if (line.startsWith("Warning:")) {
-                    line = line.replace("Warning:", "");
-                    processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, line);
-                } else if (line.startsWith("Debug:")) {
-                    line = line.replace("Debug:", "");
-                    processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, line);
-                }
-            }
-        }
-        return output;
     }
 }

@@ -27,8 +27,13 @@
 
 package org.openjdk.jextract.clang.libclang;
 
+import io.github.digitalsmile.OsCheck;
+import io.github.digitalsmile.library.LibraryPath;
+
+import java.io.IOException;
 import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.*;
 
@@ -96,14 +101,7 @@ public class Index_h {
         }
         throw new IllegalArgumentException("Invalid type for ABI: " + c.getTypeName());
     }
-
-    static {
-        String libName = System.getProperty("os.name").startsWith("Windows") ? "libclang" : "clang";
-        System.loadLibrary(libName);
-    }
-
-    static final SymbolLookup SYMBOL_LOOKUP = SymbolLookup.loaderLookup()
-            .or(Linker.nativeLinker().defaultLookup());
+    static SymbolLookup SYMBOL_LOOKUP = SymbolLookup.libraryLookup(LibraryPath.saveAndGetPath("libclang"), LIBRARY_ARENA);
 
     public static final ValueLayout.OfBoolean C_BOOL = ValueLayout.JAVA_BOOLEAN;
     public static final ValueLayout.OfByte C_CHAR = ValueLayout.JAVA_BYTE;

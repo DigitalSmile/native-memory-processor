@@ -14,6 +14,9 @@ dependencies {
     implementation 'io.soabase.java-composer:java-composer:1.0'
     implementation 'io.github.digitalsmile.native:annotation:0.9'
 
+    annotationProcessor 'io.avaje:avaje-prisms:1.28'
+    implementation 'io.avaje:avaje-prisms:1.28'
+
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }

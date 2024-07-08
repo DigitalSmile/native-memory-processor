@@ -19,7 +19,7 @@ permissions:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v4
@@ -28,10 +28,8 @@ jobs:
         with:
           java-version: '22'
           distribution: 'corretto'
-      - name: Install libclang
-        run: sudo apt-get install -y libclang1
-      - name: Create symlink
-        run: sudo ln -s /usr/lib/x86_64-linux-gnu/libclang-16.so.1 /usr/lib/x86_64-linux-gnu/libclang.so
+      - name: Install headers for test
+        run: sudo apt-get install -y linux-libc-dev
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
       - name: Setup Gradle

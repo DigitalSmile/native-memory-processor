@@ -36,8 +36,8 @@ public abstract class NativeFunction {
      * @param args          arguments called to function
      * @throws NativeMemoryException if call result is -1
      */
-    protected void processError(long callResult, MemorySegment capturedState, String method, Object... args) throws NativeMemoryException {
-        if (callResult == -1) {
+    protected void processError(Number callResult, MemorySegment capturedState, String method, Object... args) throws NativeMemoryException {
+        if (callResult.intValue() == -1) {
             try {
                 int errno = (int) ERRNO_HANDLE.get(capturedState, 0L);
                 var errnoStr = (MemorySegment) STR_ERROR.invokeExact(errno);

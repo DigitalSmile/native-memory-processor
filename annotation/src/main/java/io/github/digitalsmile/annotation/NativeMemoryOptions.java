@@ -8,7 +8,7 @@ import java.lang.annotation.Target;
 /**
  * Options, used in context of current <code>NativeMemory</code> processing run.
  */
-@Target(value = ElementType.ANNOTATION_TYPE)
+@Target(value = ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface NativeMemoryOptions {
     /**
@@ -18,5 +18,9 @@ public @interface NativeMemoryOptions {
      *
      * @return true if it is needed to generate root enum file
      */
-    boolean generateRootEnum() default false;
+    boolean processRootConstants() default false;
+
+    String packageName() default "";
+
+    String[] includes() default {};
 }

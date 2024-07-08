@@ -34,12 +34,5 @@ public @interface NativeMemory {
      *
      * @return the header file path
      */
-    String header() default "";
-
-    /**
-     * Sets the options for processing run with context of current header file.
-     *
-     * @return options defined for current <code>NativeMemory</code> processing run
-     */
-    NativeMemoryOptions options() default @NativeMemoryOptions();
+    String[] headers() default {};
 }
