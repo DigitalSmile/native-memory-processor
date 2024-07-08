@@ -264,7 +264,6 @@ public class NativeProcessor extends AbstractProcessor {
             Path headerPath;
             if (headerFile.startsWith("/")) {
                 headerFile = headerFile.replace("${version}", System.getProperty("headerVersion"));
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, headerFile);
                 headerPath = Path.of(headerFile);
             } else {
                 Path rootPath;
