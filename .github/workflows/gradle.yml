@@ -35,4 +35,4 @@ jobs:
         run: chmod +x ./gradlew
       - name: Build Gradle
         run: |
-          ./gradlew build :annotation-processor-test:build -DheaderVersion=$headerVersion
+          ./gradlew build -DheaderVersion=$headerVersion
