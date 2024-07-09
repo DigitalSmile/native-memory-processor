@@ -5,3 +5,8 @@ plugins {
 build {
     dependsOn gradle.includedBuild('annotation-processor-test').task(':build')
 }
+
+tasks.register('publish') {
+    dependsOn gradle.includedBuild('annotation-processor').task(':publish')
+    dependsOn gradle.includedBuild('annotation').task(':publish')
+}

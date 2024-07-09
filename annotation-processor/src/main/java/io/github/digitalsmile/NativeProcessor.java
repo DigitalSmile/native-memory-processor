@@ -5,7 +5,7 @@ import io.avaje.prism.GeneratePrism;
 import io.github.digitalsmile.annotation.NativeMemory;
 import io.github.digitalsmile.annotation.NativeMemoryOptions;
 import io.github.digitalsmile.annotation.function.ByAddress;
-import io.github.digitalsmile.annotation.function.Function;
+import io.github.digitalsmile.annotation.function.NativeFunction;
 import io.github.digitalsmile.annotation.function.NativeMemoryException;
 import io.github.digitalsmile.annotation.function.Returns;
 import io.github.digitalsmile.annotation.structure.Enums;
@@ -15,6 +15,7 @@ import io.github.digitalsmile.composers.EnumComposer;
 import io.github.digitalsmile.composers.FunctionComposer;
 import io.github.digitalsmile.composers.StructComposer;
 import io.github.digitalsmile.functions.FunctionNode;
+import io.github.digitalsmile.functions.Library;
 import io.github.digitalsmile.functions.ParameterNode;
 import io.github.digitalsmile.headers.mapping.ObjectTypeMapping;
 import io.github.digitalsmile.headers.model.NativeMemoryModel;
@@ -46,7 +47,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
 
-@GeneratePrism(Function.class)
+@GeneratePrism(NativeFunction.class)
 @SupportedSourceVersion(SourceVersion.RELEASE_22)
 public class NativeProcessor extends AbstractProcessor {
 
@@ -55,21 +56,6 @@ public class NativeProcessor extends AbstractProcessor {
         return Set.of(NativeMemory.class.getName());
     }
 
-
-    public record Library(String libraryName, boolean isAlreadyLoaded) {
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Library library = (Library) o;
-            return isAlreadyLoaded == library.isAlreadyLoaded && Objects.equals(libraryName, library.libraryName);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(libraryName, isAlreadyLoaded);
-        }
-    }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
@@ -88,7 +74,7 @@ public class NativeProcessor extends AbstractProcessor {
 
                 processHeaderFiles(rootElement, headerFiles, packageName, nativeOptions);
 
-                List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(Function.class)).stream()
+                List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(NativeFunction.class)).stream()
                         .filter(f -> f.getEnclosingElement().equals(rootElement)).toList();
                 processFunctions(rootElement, functionElements, packageName);
 
@@ -109,7 +95,7 @@ public class NativeProcessor extends AbstractProcessor {
         List<Path> headerPaths = getHeaderPaths(headerFiles);
         for (Path path : headerPaths) {
             if (!path.toFile().exists()) {
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, "Cannot find header file '" + path + "'!", element);
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, "Cannot find header file '" + path + "'! Please, check file location", element);
                 return;
             }
         }
@@ -221,7 +207,7 @@ public class NativeProcessor extends AbstractProcessor {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Method '" + functionElement + "' must throw NativeMemoryException!", functionElement);
                 break;
             }
-            var instance = FunctionPrism.getInstanceOn(functionElement);
+            var instance = NativeFunctionPrism.getInstanceOn(functionElement);
             if (instance == null) {
                 break;
             }
@@ -260,9 +246,20 @@ public class NativeProcessor extends AbstractProcessor {
     private List<Path> getHeaderPaths(String[] headerFiles) {
         List<Path> paths = new ArrayList<>();
         for (String headerFile : headerFiles) {
+            var beginVariable = headerFile.indexOf("${");
+            var endVariable = headerFile.indexOf("}");
+            if (beginVariable != -1 && endVariable != -1) {
+                var sub = headerFile.substring(beginVariable + 2, endVariable);
+                var property = System.getProperty(sub);
+                if (property != null) {
+                    headerFile = headerFile.replace("${" + sub + "}", property);
+                } else {
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "'" + headerFile + "' contains system property '" + sub + "', which is no defined");
+                    continue;
+                }
+            }
             Path headerPath;
             if (headerFile.startsWith("/")) {
-                headerFile = headerFile.replace("${version}", System.getProperty("headerVersion"));
                 headerPath = Path.of(headerFile);
             } else {
                 Path rootPath;

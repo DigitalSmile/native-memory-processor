@@ -1,9 +1,9 @@
 package io.github.digitalsmile.composers;
 
 import com.squareup.javapoet.*;
-import io.github.digitalsmile.NativeProcessor;
+import io.github.digitalsmile.functions.Library;
 import io.github.digitalsmile.PrettyName;
-import io.github.digitalsmile.annotation.function.NativeFunction;
+import io.github.digitalsmile.annotation.function.NativeCall;
 import io.github.digitalsmile.annotation.function.NativeMemoryException;
 import io.github.digitalsmile.functions.FunctionNode;
 import io.github.digitalsmile.functions.ParameterNode;
@@ -31,18 +31,18 @@ public class FunctionComposer {
         this.messager = messager;
     }
 
-    public String compose(String packageName, String originalName, String javaName, Map<FunctionNode, ExecutableElement> methodsMap, Map<NativeProcessor.Library, List<FunctionNode>> libraries) {
+    public String compose(String packageName, String originalName, String javaName, Map<FunctionNode, ExecutableElement> methodsMap, Map<Library, List<FunctionNode>> libraries) {
         var classBuilder = TypeSpec.classBuilder(javaName)
                 .addModifiers(Modifier.PUBLIC)
                 .addSuperinterface(ClassName.get(packageName, originalName))
-                .superclass(NativeFunction.class);
+                .superclass(NativeCall.class);
 
         Map<FunctionNode, String> nameMapper = new HashMap<>();
-        for (NativeProcessor.Library libraryEntry : libraries.keySet()) {
+        for (Library libraryEntry : libraries.keySet()) {
             var counter = 0;
             for (FunctionNode node : libraries.get(libraryEntry)) {
-                var contains = nameMapper.containsValue(node.getFunctionName());
-                nameMapper.put(node, !contains ? node.getFunctionName().toUpperCase() + counter++ : node.getFunctionName().toUpperCase());
+                var contains = nameMapper.containsValue(node.functionName());
+                nameMapper.put(node, !contains ? node.functionName().toUpperCase() + counter++ : node.functionName().toUpperCase());
             }
 
             if (libraryEntry.libraryName().equals("libc")) {
@@ -66,7 +66,7 @@ public class FunctionComposer {
             for (FunctionNode functionNode : nodes) {
                 var returnsCodeBlock = CodeBlock.builder();
                 List<CodeBlock> parameters = new ArrayList<>();
-                var nativeReturnTypeMapping = functionNode.getNativeReturnType().typeMapping();
+                var nativeReturnTypeMapping = functionNode.nativeReturnType().typeMapping();
                 if (!nativeReturnTypeMapping.carrierClass().equals(void.class)) {
                     switch (nativeReturnTypeMapping) {
                         case PrimitiveTypeMapping primitiveTypeMapping ->
@@ -78,14 +78,14 @@ public class FunctionComposer {
                 }
                 List<CodeBlock> arguments = new ArrayList<>();
                 var methodBody = CodeBlock.builder();
-                for (ParameterNode parameterNode : functionNode.getFunctionParameters()) {
-                    var prettyName = PrettyName.getVariableName(parameterNode.getName());
-                    var parameterTypeMapping = parameterNode.getTypeMapping().typeMapping();
-                    if (parameterNode.isByAddress()) {
+                for (ParameterNode parameterNode : functionNode.functionParameters()) {
+                    var prettyName = PrettyName.getVariableName(parameterNode.name());
+                    var parameterTypeMapping = parameterNode.typeMapping().typeMapping();
+                    if (parameterNode.byAddress()) {
                         parameters.add(CodeBlock.builder().add("$T.ADDRESS", ValueLayout.class).build());
                         arguments.add(CodeBlock.builder().add("$LMemorySegment", prettyName).build());
 
-                        switch (parameterNode.getTypeMapping()) {
+                        switch (parameterNode.typeMapping()) {
                             case ArrayOriginalType _ -> {
                                 methodBody.addStatement("var $LMemorySegment = offHeap.allocateFrom($T.$L, $L)", prettyName,
                                         ValueLayout.class, parameterTypeMapping.valueLayoutName(), prettyName);
@@ -103,7 +103,7 @@ public class FunctionComposer {
                                 methodBody.addStatement("$LMemorySegment.set($T.$L, 0, $L)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName(), prettyName);
                             }
                             default ->
-                                    throw new IllegalStateException("Unexpected value: " + parameterNode.getTypeMapping());
+                                    throw new IllegalStateException("Unexpected value: " + parameterNode.typeMapping());
                         }
                     } else {
                         parameters.add(CodeBlock.builder().add("$T.$L", ValueLayout.class, parameterTypeMapping.valueLayoutName()).build());
@@ -114,8 +114,8 @@ public class FunctionComposer {
                         }
                     }
 
-                    if (parameterNode.isReturns()) {
-                        switch (parameterNode.getTypeMapping()) {
+                    if (parameterNode.returns()) {
+                        switch (parameterNode.typeMapping()) {
                             case ArrayOriginalType _ -> {
                                 returnsCodeBlock.addStatement("return $LMemorySegment.toArray($T.$L)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName());
                             }
@@ -123,36 +123,36 @@ public class FunctionComposer {
                                 if (parameterTypeMapping.carrierClass().equals(String.class)) {
                                     returnsCodeBlock.addStatement("return $LMemorySegment.getString(0)", prettyName);
                                 } else {
-                                    returnsCodeBlock.addStatement("return $L.createEmpty().fromBytes($LMemorySegment)", PrettyName.getObjectName(functionNode.getReturnType().typeName()), prettyName);
+                                    returnsCodeBlock.addStatement("return $L.createEmpty().fromBytes($LMemorySegment)", PrettyName.getObjectName(functionNode.returnType().typeName()), prettyName);
                                 }
                             }
                             case PrimitiveOriginalType _ -> {
                                 returnsCodeBlock.addStatement("return $LMemorySegment.get($T.$L, 0)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName());
                             }
                             default ->
-                                    throw new IllegalStateException("Unexpected value: " + parameterNode.getTypeMapping());
+                                    throw new IllegalStateException("Unexpected value: " + parameterNode.typeMapping());
                         }
                     }
                 }
 
-                if (!nativeReturnTypeMapping.carrierClass().equals(void.class) && functionNode.getFunctionParameters().stream().noneMatch(ParameterNode::isReturns)) {
+                if (!nativeReturnTypeMapping.carrierClass().equals(void.class) && functionNode.functionParameters().stream().noneMatch(ParameterNode::returns)) {
                     returnsCodeBlock.addStatement("return callResult");
                 }
 
                 CodeBlock.Builder initializer = CodeBlock.builder().add("$T.nativeLinker().downcallHandle($W", Linker.class);
                 var library = libraries.entrySet().stream().filter(e -> e.getValue().contains(functionNode)).map(Map.Entry::getKey).findFirst().orElseThrow();
                 var libraryName = library.libraryName().equals("libc") ? "STD" : library.libraryName().toUpperCase();
-                initializer.add("$L.find($S).orElseThrow(),$W", libraryName + "_LIB", functionNode.getFunctionName());
+                initializer.add("$L.find($S).orElseThrow(),$W", libraryName + "_LIB", functionNode.functionName());
 
                 initializer.add("$T.$L($L)$L", FunctionDescriptor.class,
                         nativeReturnTypeMapping.carrierClass().equals(void.class) ? "ofVoid" : "of",
-                        CodeBlock.join(parameters, ", "), functionNode.isUseErrno() ? "," : ")");
+                        CodeBlock.join(parameters, ", "), functionNode.useErrno() ? "," : ")");
 
-                if (functionNode.isUseErrno()) {
+                if (functionNode.useErrno()) {
                     initializer.add("$W");
                     initializer.add("$T.captureCallState($S))", Linker.Option.class, "errno");
                 }
-                if (functionNode.isUseErrno()) {
+                if (functionNode.useErrno()) {
                     methodBody.addStatement("var capturedState = offHeap.allocate(CAPTURED_STATE_LAYOUT)");
                     if (nativeReturnTypeMapping.carrierClass().equals(void.class)) {
                         methodBody.addStatement("$L.invoke($L)", nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
@@ -174,7 +174,7 @@ public class FunctionComposer {
                 }
 
                 var methodSpecBuilder = MethodSpec.overriding(methodsMap.get(functionNode)).addException(NativeMemoryException.class);
-                if (functionNode.isUseErrno() || functionNode.getFunctionParameters().stream().noneMatch(ParameterNode::isReturns)) {
+                if (functionNode.useErrno() || functionNode.functionParameters().stream().noneMatch(ParameterNode::returns)) {
                     methodSpecBuilder.beginControlFlow("try (var offHeap = $T.ofConfined())", Arena.class);
                 } else {
                     methodSpecBuilder.beginControlFlow("try ");
