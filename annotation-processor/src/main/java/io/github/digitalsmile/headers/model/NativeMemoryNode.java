@@ -1,7 +1,7 @@
 package io.github.digitalsmile.headers.model;
 
-import io.github.digitalsmile.headers.type.NodeType;
-import io.github.digitalsmile.headers.type.OriginalType;
+import io.github.digitalsmile.headers.mapping.NodeType;
+import io.github.digitalsmile.headers.mapping.OriginalType;
 
 import java.util.ArrayList;
 import java.util.List;

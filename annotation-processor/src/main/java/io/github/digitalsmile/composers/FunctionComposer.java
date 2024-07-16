@@ -1,18 +1,16 @@
 package io.github.digitalsmile.composers;
 
 import com.squareup.javapoet.*;
-import io.github.digitalsmile.functions.Library;
 import io.github.digitalsmile.PrettyName;
 import io.github.digitalsmile.annotation.function.NativeCall;
 import io.github.digitalsmile.annotation.function.NativeMemoryException;
+import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
 import io.github.digitalsmile.functions.FunctionNode;
+import io.github.digitalsmile.functions.Library;
 import io.github.digitalsmile.functions.ParameterNode;
-import io.github.digitalsmile.headers.mapping.DeferredObjectTypeMapping;
-import io.github.digitalsmile.headers.mapping.ObjectTypeMapping;
-import io.github.digitalsmile.headers.mapping.PrimitiveTypeMapping;
-import io.github.digitalsmile.headers.type.ArrayOriginalType;
-import io.github.digitalsmile.headers.type.ObjectOriginalType;
-import io.github.digitalsmile.headers.type.PrimitiveOriginalType;
+import io.github.digitalsmile.headers.mapping.ArrayOriginalType;
+import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
+import io.github.digitalsmile.headers.mapping.PrimitiveOriginalType;
 
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.ExecutableElement;
@@ -66,12 +64,12 @@ public class FunctionComposer {
             for (FunctionNode functionNode : nodes) {
                 var returnsCodeBlock = CodeBlock.builder();
                 List<CodeBlock> parameters = new ArrayList<>();
-                var nativeReturnTypeMapping = functionNode.nativeReturnType().typeMapping();
+                var nativeReturnTypeMapping = functionNode.nativeReturnType();
                 if (!nativeReturnTypeMapping.carrierClass().equals(void.class)) {
                     switch (nativeReturnTypeMapping) {
-                        case PrimitiveTypeMapping primitiveTypeMapping ->
+                        case PrimitiveOriginalType primitiveTypeMapping ->
                                 parameters.add(CodeBlock.builder().add("$T.$L", ValueLayout.class, primitiveTypeMapping.valueLayoutName()).build());
-                        case ObjectTypeMapping _, DeferredObjectTypeMapping _ ->
+                        case ObjectOriginalType _, ArrayOriginalType _ ->
                                 parameters.add(CodeBlock.builder().add("$T.ADDRESS", ValueLayout.class).build());
                         default -> throw new IllegalStateException("Unexpected value: " + nativeReturnTypeMapping);
                     }
@@ -80,7 +78,7 @@ public class FunctionComposer {
                 var methodBody = CodeBlock.builder();
                 for (ParameterNode parameterNode : functionNode.functionParameters()) {
                     var prettyName = PrettyName.getVariableName(parameterNode.name());
-                    var parameterTypeMapping = parameterNode.typeMapping().typeMapping();
+                    var parameterTypeMapping = parameterNode.typeMapping();
                     if (parameterNode.byAddress()) {
                         parameters.add(CodeBlock.builder().add("$T.ADDRESS", ValueLayout.class).build());
                         arguments.add(CodeBlock.builder().add("$LMemorySegment", prettyName).build());
@@ -107,7 +105,7 @@ public class FunctionComposer {
                         }
                     } else {
                         parameters.add(CodeBlock.builder().add("$T.$L", ValueLayout.class, parameterTypeMapping.valueLayoutName()).build());
-                        if (parameterTypeMapping instanceof ObjectTypeMapping) {
+                        if (parameterTypeMapping instanceof ObjectOriginalType) {
                             arguments.add(CodeBlock.builder().add("$LMemorySegment", prettyName).build());
                         } else {
                             arguments.add(CodeBlock.builder().add("$L", prettyName).build());
@@ -122,6 +120,8 @@ public class FunctionComposer {
                             case ObjectOriginalType _ -> {
                                 if (parameterTypeMapping.carrierClass().equals(String.class)) {
                                     returnsCodeBlock.addStatement("return $LMemorySegment.getString(0)", prettyName);
+                                } else if (parameterTypeMapping.carrierClass().equals(NativeMemoryLayout.class)) {
+                                    returnsCodeBlock.addStatement("return $L.fromBytes($LMemorySegment)", prettyName, prettyName);
                                 } else {
                                     returnsCodeBlock.addStatement("return $L.createEmpty().fromBytes($LMemorySegment)", PrettyName.getObjectName(functionNode.returnType().typeName()), prettyName);
                                 }
@@ -158,18 +158,32 @@ public class FunctionComposer {
                         methodBody.addStatement("$L.invoke($L)", nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
                         methodBody.addStatement("processError(capturedState, $S, $L)", methodsMap.get(functionNode), CodeBlock.join(arguments, ", "));
                     } else {
-                        methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
-                                nativeReturnTypeMapping.carrierClass().equals(Object.class) ? MemorySegment.class : nativeReturnTypeMapping.carrierClass(),
-                                nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
+                        switch (functionNode.nativeReturnType()) {
+                            case ArrayOriginalType _, ObjectOriginalType _ ->
+                                    methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
+                                            MemorySegment.class,
+                                            nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
+                            default ->
+                                methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
+                                        nativeReturnTypeMapping.carrierClass(),
+                                        nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
+                        }
                         methodBody.addStatement("processError(callResult, capturedState, $S, $L)", methodsMap.get(functionNode), CodeBlock.join(arguments, ", "));
                     }
                 } else {
                     if (nativeReturnTypeMapping.carrierClass().equals(void.class)) {
                         methodBody.addStatement("$L.invoke($L)", nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
                     } else {
-                        methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
-                                nativeReturnTypeMapping.carrierClass().equals(Object.class) ? MemorySegment.class : nativeReturnTypeMapping.carrierClass(),
-                                nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
+                        switch (functionNode.nativeReturnType()) {
+                            case ArrayOriginalType _, ObjectOriginalType _ ->
+                                    methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
+                                            MemorySegment.class,
+                                            nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
+                            default ->
+                                    methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
+                                            nativeReturnTypeMapping.carrierClass(),
+                                            nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
+                        }
                     }
                 }
 

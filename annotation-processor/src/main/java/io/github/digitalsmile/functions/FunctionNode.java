@@ -1,6 +1,6 @@
 package io.github.digitalsmile.functions;
 
-import io.github.digitalsmile.headers.type.OriginalType;
+import io.github.digitalsmile.headers.mapping.OriginalType;
 
 import java.util.List;
 

@@ -4,8 +4,8 @@ import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.TypeSpec;
-import io.github.digitalsmile.headers.mapping.PrimitiveTypeMapping;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
+import io.github.digitalsmile.headers.mapping.PrimitiveOriginalType;
 
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.Modifier;
@@ -26,7 +26,7 @@ public class EnumComposer {
                     .addModifiers(Modifier.PUBLIC)
                     .addJavadoc("Source: $L", parentNode.getSource());
             for (NativeMemoryNode node : parentNode.nodes()) {
-                var type = (PrimitiveTypeMapping) node.getType().typeMapping();
+                var type = (PrimitiveOriginalType) node.getType();
                 var fieldSpec = FieldSpec.builder(type.valueLayout().carrier(), node.getName(), Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
                         .initializer("$L$L", node.getValue(), type.literal())
                         .addJavadoc("Source: $L", node.getSource())
@@ -36,7 +36,7 @@ public class EnumComposer {
             var outputFile = JavaFile.builder(packageName, classBuilder.build()).indent("\t").skipJavaLangImports(true).build();
             return outputFile.toString();
         } else {
-            var type = (PrimitiveTypeMapping) parentNode.nodes().getFirst().getType().typeMapping();
+            var type = (PrimitiveOriginalType) parentNode.nodes().getFirst().getType();
             var enumBuilder = TypeSpec.enumBuilder(prettyName)
                     .addModifiers(Modifier.PUBLIC)
                     .addJavadoc("Source: $L", parentNode.getSource());

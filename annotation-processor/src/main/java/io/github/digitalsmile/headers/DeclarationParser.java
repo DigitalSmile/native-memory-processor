@@ -3,8 +3,9 @@ package io.github.digitalsmile.headers;
 import io.github.digitalsmile.NativeProcessor;
 import io.github.digitalsmile.PrettyName;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
-import io.github.digitalsmile.headers.type.NodeType;
-import io.github.digitalsmile.headers.type.OriginalType;
+import io.github.digitalsmile.headers.mapping.NodeType;
+import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
+import io.github.digitalsmile.headers.mapping.OriginalType;
 import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.Type;
 
@@ -87,14 +88,25 @@ public class DeclarationParser {
                             }
                             if (parent.kind().equals(Declaration.Scoped.Kind.TOPLEVEL)) {
                                 var name = declarationScoped.name();
+                                OriginalType type;
                                 if (name.startsWith("enum (unnamed")) {
                                     name = PrettyName.getObjectName(parentNode.getName()) + "Enum" + enumCount++;
+                                    type = new ObjectOriginalType(name);
+                                } else {
+                                    type = OriginalType.ofObject(name);
                                 }
-                                var structNode = new NativeMemoryNode(name, nodeType, OriginalType.ofObject(name), declarationScoped.pos().toString());
+                                var structNode = new NativeMemoryNode(name, nodeType, type, declarationScoped.pos().toString());
                                 parseDeclaration(declarationScoped, structNode);
                                 model.computeIfAbsent(Declaration.Scoped.Kind.ENUM, _ -> new ArrayList<>()).add(structNode);
                             } else {
-                                var enumNode = new NativeMemoryNode("enum_" + enumCount++, nodeType, OriginalType.ofObject(declarationScoped.name()), declarationScoped.pos().toString());
+                                var name = "enum_" + enumCount++;
+                                OriginalType type;
+                                if (nodeType.equals(NodeType.ANON_ENUM)) {
+                                    type = new ObjectOriginalType(name);
+                                } else {
+                                    type = OriginalType.ofObject(declarationScoped.name());
+                                }
+                                var enumNode = new NativeMemoryNode(name, nodeType, type, declarationScoped.pos().toString());
                                 parseDeclaration(declarationScoped, enumNode);
                                 parentNode.addNode(enumNode);
                             }
@@ -107,11 +119,26 @@ public class DeclarationParser {
                                 continue;
                             }
                             if (parent.kind().equals(Declaration.Scoped.Kind.TOPLEVEL)) {
-                                var structNode = new NativeMemoryNode(declarationScoped.name(), nodeType, OriginalType.ofObject(declarationScoped.name()), declarationScoped.pos().toString());
+                                OriginalType type;
+                                var name = declarationScoped.name();
+                                if (name.startsWith("union (unnamed")) {
+                                    name = PrettyName.getObjectName(parentNode.getName()) + "Union" + enumCount++;
+                                    type = new ObjectOriginalType(name);
+                                } else {
+                                    type = OriginalType.ofObject(name);
+                                }
+                                var structNode = new NativeMemoryNode(name, nodeType, type, declarationScoped.pos().toString());
                                 parseDeclaration(declarationScoped, structNode);
                                 model.computeIfAbsent(Declaration.Scoped.Kind.UNION, _ -> new ArrayList<>()).add(structNode);
                             } else {
-                                var unionNode = new NativeMemoryNode("union_" + unionCount++, nodeType, OriginalType.ofObject(declarationScoped.name()), declarationScoped.pos().toString());
+                                var name = "union_" + unionCount++;
+                                OriginalType type;
+                                if (nodeType.equals(NodeType.ANON_UNION)) {
+                                    type = new ObjectOriginalType(name);
+                                } else {
+                                    type = OriginalType.ofObject(declarationScoped.name());
+                                }
+                                var unionNode = new NativeMemoryNode(name, nodeType, type, declarationScoped.pos().toString());
                                 parseDeclaration(declarationScoped, unionNode);
                                 parentNode.addNode(unionNode);
                             }

@@ -1,4 +1,4 @@
-package io.github.digitalsmile.headers.type;
+package io.github.digitalsmile.headers.mapping;
 
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.type.TypeKind;

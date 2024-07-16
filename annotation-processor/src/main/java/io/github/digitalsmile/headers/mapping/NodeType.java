@@ -1,4 +1,4 @@
-package io.github.digitalsmile.headers.type;
+package io.github.digitalsmile.headers.mapping;
 
 public enum NodeType {
     STRUCT, ENUM, UNION,

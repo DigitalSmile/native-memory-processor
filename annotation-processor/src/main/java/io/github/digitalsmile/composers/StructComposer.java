@@ -3,13 +3,11 @@ package io.github.digitalsmile.composers;
 import com.squareup.javapoet.*;
 import io.github.digitalsmile.PrettyName;
 import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
-import io.github.digitalsmile.headers.mapping.ObjectTypeMapping;
-import io.github.digitalsmile.headers.mapping.PrimitiveTypeMapping;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
-import io.github.digitalsmile.headers.type.ArrayOriginalType;
-import io.github.digitalsmile.headers.type.NodeType;
-import io.github.digitalsmile.headers.type.ObjectOriginalType;
-import io.github.digitalsmile.headers.type.PrimitiveOriginalType;
+import io.github.digitalsmile.headers.mapping.ArrayOriginalType;
+import io.github.digitalsmile.headers.mapping.NodeType;
+import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
+import io.github.digitalsmile.headers.mapping.PrimitiveOriginalType;
 
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.Modifier;
@@ -98,19 +96,19 @@ public class StructComposer {
             var type = node.getType();
             switch (type) {
                 case ArrayOriginalType arrayType -> {
-                    if (arrayType.typeMapping() instanceof ObjectTypeMapping objectTypeMapping) {
-                        fieldSpecs.add(FieldSpec.builder(ClassName.get("", PrettyName.getVariableName(objectTypeMapping.typeName()) + "[]"), PrettyName.getVariableName(node.getName())).build());
-                    } else if (arrayType.typeMapping() instanceof PrimitiveTypeMapping primitiveTypeMapping) {
-                        fieldSpecs.add(FieldSpec.builder(primitiveTypeMapping.valueLayout().carrier().arrayType(), PrettyName.getVariableName(node.getName())).build());
+                    if (arrayType.isObjectType()) {
+                        fieldSpecs.add(FieldSpec.builder(ClassName.get("", PrettyName.getObjectName(arrayType.typeName()) + "[]"), PrettyName.getVariableName(node.getName())).build());
+                    } else {
+                        fieldSpecs.add(FieldSpec.builder(arrayType.carrierClass().arrayType(), PrettyName.getVariableName(node.getName())).build());
                     }
                 }
                 case PrimitiveOriginalType primitiveType ->
-                        fieldSpecs.add(FieldSpec.builder(primitiveType.typeMapping().valueLayout().carrier(), PrettyName.getVariableName(node.getName())).build());
+                        fieldSpecs.add(FieldSpec.builder(primitiveType.carrierClass(), PrettyName.getVariableName(node.getName())).build());
                 case ObjectOriginalType objectType -> {
                     if (node.getNodeType().equals(NodeType.ANON_UNION)) {
                         fieldSpecs.addAll(processConstructorParameters(node.nodes()));
                     } else {
-                        fieldSpecs.add(FieldSpec.builder(ClassName.get("", PrettyName.getObjectName(objectType.typeMapping().typeName())), PrettyName.getVariableName(node.getName())).build());
+                        fieldSpecs.add(FieldSpec.builder(ClassName.get("", PrettyName.getObjectName(objectType.typeName())), PrettyName.getVariableName(node.getName())).build());
                     }
                 }
                 default -> messager.printMessage(Diagnostic.Kind.ERROR, "unsupported type " + type);
@@ -125,18 +123,18 @@ public class StructComposer {
             var type = node.getType();
             switch (type) {
                 case ArrayOriginalType arrayType -> {
-                    if (arrayType.typeMapping() instanceof ObjectTypeMapping objectTypeMapping) {
+                    if (arrayType.isObjectType()) {
                         memoryLayouts.add(CodeBlock.builder().add("$T.sequenceLayout($L, $L.LAYOUT).withName($S)", MemoryLayout.class,
-                                        arrayType.arraySize(), PrettyName.getVariableName(objectTypeMapping.typeName()), node.getName())
+                                        arrayType.arraySize(), PrettyName.getObjectName(arrayType.typeName()), node.getName())
                                 .build());
-                    } else if (arrayType.typeMapping() instanceof PrimitiveTypeMapping primitiveTypeMapping) {
+                    } else {
                         memoryLayouts.add(CodeBlock.builder().add("$T.sequenceLayout($L, $T.$L).withName($S)", MemoryLayout.class,
-                                        arrayType.arraySize(), ValueLayout.class, primitiveTypeMapping.valueLayoutName(), node.getName())
+                                        arrayType.arraySize(), ValueLayout.class, arrayType.valueLayoutName(), node.getName())
                                 .build());
                     }
                 }
                 case PrimitiveOriginalType primitiveType ->
-                        memoryLayouts.add(CodeBlock.builder().add("$T.$L.withName($S)", ValueLayout.class, primitiveType.typeMapping().valueLayoutName(), node.getName()).build());
+                        memoryLayouts.add(CodeBlock.builder().add("$T.$L.withName($S)", ValueLayout.class, primitiveType.valueLayoutName(), node.getName()).build());
                 case ObjectOriginalType objectType -> {
                     if (node.getNodeType().equals(NodeType.ANON_UNION)) {
                         memoryLayouts.add(
@@ -201,14 +199,14 @@ public class StructComposer {
             var type = node.getType();
             switch (type) {
                 case ArrayOriginalType arrayType -> {
-                    if (arrayType.typeMapping() instanceof ObjectTypeMapping) {
+                    if (arrayType.isObjectType()) {
                         statements.add(CodeBlock.builder().add("new $L[]{}", PrettyName.getObjectName(type.typeName())).build());
-                    } else if (arrayType.typeMapping() instanceof PrimitiveTypeMapping primitiveTypeMapping) {
-                        statements.add(CodeBlock.builder().add(primitiveTypeMapping.newArrayConstructor()).build());
+                    } else {
+                        statements.add(CodeBlock.builder().add(arrayType.newArrayConstructor()).build());
                     }
                 }
                 case PrimitiveOriginalType primitiveType ->
-                        statements.add(CodeBlock.builder().add(primitiveType.typeMapping().newConstructor()).build());
+                        statements.add(CodeBlock.builder().add(primitiveType.newConstructor()).build());
                 case ObjectOriginalType _ -> {
                     if (!node.getNodeType().equals(NodeType.VARIABLE)) {
                         var codeBlocks = processEmptyConstructor(node.nodes());
@@ -230,7 +228,7 @@ public class StructComposer {
             var prettyVariableName = PrettyName.getVariableName(node.getName());
             switch (type) {
                 case ArrayOriginalType arrayType -> {
-                    if (arrayType.typeMapping() instanceof ObjectTypeMapping) {
+                    if (arrayType.isObjectType()) {
                         statements.add(CodeBlock.builder()
                                 .addStatement("var $LMemorySegment = invokeExact(MH_$L, buffer)", prettyVariableName, node.getName().toUpperCase())
                                 .addStatement("var $L = new $L[$L]", prettyVariableName, PrettyName.getObjectName(arrayType.typeName()), arrayType.arraySize())
@@ -272,16 +270,16 @@ public class StructComposer {
                     CodeBlock.builder().add("buffer").build();
             switch (type) {
                 case ArrayOriginalType arrayType -> {
-                    if (arrayType.typeMapping() instanceof ObjectTypeMapping) {
+                    if (arrayType.isObjectType()) {
                         statements.add(CodeBlock.builder().add("$L", PrettyName.getVariableName(node.getName())).build());
-                    } else if (arrayType.typeMapping() instanceof PrimitiveTypeMapping primitiveTypeMapping) {
+                    } else {
                         statements.add(CodeBlock.builder().add("invokeExact(MH_$L, $L).toArray($T.$L)", node.getName().toUpperCase(), bufferName,
-                                        ValueLayout.class, primitiveTypeMapping.valueLayoutName())
+                                        ValueLayout.class, arrayType.valueLayoutName())
                                 .build());
                     }
                 }
                 case PrimitiveOriginalType primitiveOriginalType ->
-                        statements.add(CodeBlock.builder().add("($T) VH_$L.get($L, 0L)", primitiveOriginalType.typeMapping().valueLayout().carrier(), node.getName().toUpperCase(), bufferName).build());
+                        statements.add(CodeBlock.builder().add("($T) VH_$L.get($L, 0L)", primitiveOriginalType.carrierClass(), node.getName().toUpperCase(), bufferName).build());
                 case ObjectOriginalType _ -> {
                     if (!node.getNodeType().equals(NodeType.VARIABLE)) {
                         var codeBlocks = processFromReturnStatements(node.nodes());
@@ -303,7 +301,7 @@ public class StructComposer {
             var prettyVariableName = PrettyName.getVariableName(node.getName());
             switch (type) {
                 case ArrayOriginalType arrayType -> {
-                    if (arrayType.typeMapping() instanceof ObjectTypeMapping) {
+                    if (arrayType.isObjectType()) {
                         var builder = CodeBlock.builder();
                         if (!parentNodeType.equals(NodeType.VARIABLE)) {
                             builder.add(CodeBlock.builder().beginControlFlow("if ($L.length > 0)", prettyVariableName).build());
@@ -317,15 +315,15 @@ public class StructComposer {
                             builder.add(CodeBlock.builder().endControlFlow().build());
                         }
                         statements.add(builder.build());
-                    } else if (arrayType.typeMapping() instanceof PrimitiveTypeMapping primitiveTypeMapping) {
+                    } else {
                         var builder = CodeBlock.builder();
                         if (!parentNodeType.equals(NodeType.VARIABLE)) {
-                            builder.add(CodeBlock.builder().beginControlFlow("if ($L$L)", prettyVariableName, primitiveTypeMapping.isNotArrayEmpty()).build());
+                            builder.add(CodeBlock.builder().beginControlFlow("if ($L$L)", prettyVariableName, arrayType.isNotArrayEmpty()).build());
                         }
                         builder.addStatement("var $LTmp = invokeExact(MH_$L, buffer)", prettyVariableName, node.getName().toUpperCase())
                                 .beginControlFlow("for (int i = 0; i < $L.length; i++)", prettyVariableName)
                                 .addStatement("$LTmp.setAtIndex($T.$L, i, $L[i])", prettyVariableName, ValueLayout.class,
-                                        primitiveTypeMapping.valueLayoutName(), prettyVariableName)
+                                        arrayType.valueLayoutName(), prettyVariableName)
                                 .endControlFlow();
                         if (!parentNodeType.equals(NodeType.VARIABLE)) {
                             builder.add(CodeBlock.builder().endControlFlow().build());
@@ -336,7 +334,7 @@ public class StructComposer {
                 case PrimitiveOriginalType primitiveType -> {
                     var builder = CodeBlock.builder();
                     if (!parentNodeType.equals(NodeType.VARIABLE)) {
-                        builder.add(CodeBlock.builder().beginControlFlow("if ($L$L)", prettyVariableName, primitiveType.typeMapping().isNotEmpty()).build());
+                        builder.add(CodeBlock.builder().beginControlFlow("if ($L$L)", prettyVariableName, primitiveType.isNotEmpty()).build());
                     }
                     var bufferName = !node.getNodeType().equals(NodeType.VARIABLE) ?
                             CodeBlock.builder().add("$LBuffer", PrettyName.getVariableName(node.getName())).build() :
@@ -370,14 +368,14 @@ public class StructComposer {
             var type = node.getType();
             switch (type) {
                 case ArrayOriginalType arrayType -> {
-                    if (arrayType.typeMapping() instanceof ObjectTypeMapping) {
+                    if (arrayType.isObjectType()) {
                         statements.add(CodeBlock.builder().add("$L.length > 0", PrettyName.getVariableName(node.getName())).build());
-                    } else if (arrayType.typeMapping() instanceof PrimitiveTypeMapping primitiveTypeMapping) {
-                        statements.add(CodeBlock.builder().add("$L$L", PrettyName.getVariableName(node.getName()), primitiveTypeMapping.isArrayEmpty()).build());
+                    } else {
+                        statements.add(CodeBlock.builder().add("$L$L", PrettyName.getVariableName(node.getName()), arrayType.isArrayEmpty()).build());
                     }
                 }
                 case PrimitiveOriginalType primitiveOriginalType ->
-                        statements.add(CodeBlock.builder().add("$L$L", PrettyName.getVariableName(node.getName()), primitiveOriginalType.typeMapping().isEmpty()).build());
+                        statements.add(CodeBlock.builder().add("$L$L", PrettyName.getVariableName(node.getName()), primitiveOriginalType.isEmpty()).build());
                 case ObjectOriginalType _ -> {
                     if (!node.getNodeType().equals(NodeType.VARIABLE)) {
                         var codeBlocks = processIsEmptyReturnStatements(node.nodes());

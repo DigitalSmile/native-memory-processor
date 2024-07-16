@@ -9,6 +9,7 @@ import io.github.digitalsmile.annotation.function.NativeFunction;
 import io.github.digitalsmile.annotation.function.NativeMemoryException;
 import io.github.digitalsmile.annotation.function.Returns;
 import io.github.digitalsmile.annotation.structure.Enums;
+import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
 import io.github.digitalsmile.annotation.structure.Structs;
 import io.github.digitalsmile.annotation.structure.Unions;
 import io.github.digitalsmile.composers.EnumComposer;
@@ -17,13 +18,12 @@ import io.github.digitalsmile.composers.StructComposer;
 import io.github.digitalsmile.functions.FunctionNode;
 import io.github.digitalsmile.functions.Library;
 import io.github.digitalsmile.functions.ParameterNode;
-import io.github.digitalsmile.headers.mapping.ObjectTypeMapping;
+import io.github.digitalsmile.headers.Parser;
 import io.github.digitalsmile.headers.model.NativeMemoryModel;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
-import io.github.digitalsmile.headers.type.ObjectOriginalType;
-import io.github.digitalsmile.headers.type.ObjectTypeMirror;
-import io.github.digitalsmile.headers.type.OriginalType;
-import io.github.digitalsmile.headers.Parser;
+import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
+import io.github.digitalsmile.headers.mapping.ObjectTypeMirror;
+import io.github.digitalsmile.headers.mapping.OriginalType;
 import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.JextractTool;
 import org.openjdk.jextract.clang.Index;
@@ -38,6 +38,7 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.TypeKind;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
@@ -107,26 +108,14 @@ public class NativeProcessor extends AbstractProcessor {
         List<Type> structs = null;
         if (structsAnnotation != null) {
             structs = Arrays.stream(structsAnnotation.value()).map(struct -> new Type(struct.name(), struct.javaName())).toList();
-            Arrays.stream(structsAnnotation.value()).forEach(struct -> {
-                PrettyName.addName(struct.name(), struct.javaName());
-                OriginalType.register(new ObjectTypeMapping(struct.name()));
-            });
         }
         List<Type> enums = null;
         if (enumsAnnotation != null) {
             enums = Arrays.stream(enumsAnnotation.value()).map(enoom -> new Type(enoom.name(), enoom.javaName())).toList();
-            Arrays.stream(enumsAnnotation.value()).forEach(enoom -> {
-                PrettyName.addName(enoom.name(), enoom.javaName());
-                OriginalType.register(new ObjectTypeMapping(enoom.name()));
-            });
         }
         List<Type> unions = null;
         if (unionsAnnotation != null) {
             unions = Arrays.stream(unionsAnnotation.value()).map(union -> new Type(union.name(), union.javaName())).toList();
-            Arrays.stream(unionsAnnotation.value()).forEach(union -> {
-                PrettyName.addName(union.name(), union.javaName());
-                OriginalType.register(new ObjectTypeMapping(union.name()));
-            });
         }
 
         boolean rootConstants = false;
@@ -217,14 +206,19 @@ public class NativeProcessor extends AbstractProcessor {
                 break;
             }
             List<ParameterNode> parameters = new ArrayList<>();
-            var returnType = OriginalType.of(functionElement.getReturnType());
+
+            var returnType = getBoundsOriginalType(functionElement);
+            if (returnType == null) {
+                return;
+            }
             var nativeReturnType = OriginalType.of(instance.returnType() != null ? instance.returnType() : new ObjectTypeMirror());
             for (VariableElement variableElement : functionElement.getParameters()) {
                 var returns = variableElement.getAnnotation(Returns.class);
                 var byAddress = variableElement.getAnnotation(ByAddress.class);
-                var type = OriginalType.of(variableElement.asType());
+                var type = variableElement.asType();
+                var originalType = type.getKind().equals(TypeKind.TYPEVAR) ? returnType : OriginalType.of(type);
                 var parameterNode = new ParameterNode(variableElement.getSimpleName().toString(),
-                        type, returns != null, byAddress != null || type instanceof ObjectOriginalType);
+                        originalType, returns != null, byAddress != null || originalType instanceof ObjectOriginalType);
                 parameters.add(parameterNode);
             }
 
@@ -239,6 +233,21 @@ public class NativeProcessor extends AbstractProcessor {
         var originalJavaName = PrettyName.getObjectName(rootElement.getSimpleName().toString());
         var output = functionComposer.compose(packageName, originalJavaName, nativeClassJavaName, methodMap, libraries);
         createGeneratedFile(packageName, nativeClassJavaName, output);
+    }
+
+    private OriginalType getBoundsOriginalType(ExecutableElement functionElement) {
+        var methodRealTypes = functionElement.getTypeParameters().stream().findFirst().orElse(null);
+        if (methodRealTypes != null) {
+            var boundsType = methodRealTypes.getBounds().stream().findFirst().orElse(null);
+            if (boundsType == null || !boundsType.toString().equals(NativeMemoryLayout.class.getName())) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Parameter with object definition should extend NativeMemoryLayout interface", functionElement);
+                return null;
+            } else {
+                return OriginalType.of(boundsType);
+            }
+        } else {
+            return OriginalType.of(functionElement.getReturnType());
+        }
     }
 
     private FileObject tmpFile;

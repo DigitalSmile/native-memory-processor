@@ -3,10 +3,11 @@ package io.github.digitalsmile.headers;
 import io.github.digitalsmile.NativeProcessor;
 import io.github.digitalsmile.headers.model.NativeMemoryModel;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
-import io.github.digitalsmile.headers.type.OriginalType;
+import io.github.digitalsmile.headers.mapping.OriginalType;
 import org.openjdk.jextract.Declaration;
 
 import javax.annotation.processing.Messager;
+import javax.tools.Diagnostic;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +31,7 @@ public class Parser {
             parsedObjectNames.addAll(flatten(declaration.members()).toList());
         }
         for (String object : parsedObjectNames) {
-            OriginalType.resolve(object);
+            OriginalType.register(object);
         }
 
         List<NativeMemoryModel> models = new ArrayList<>();

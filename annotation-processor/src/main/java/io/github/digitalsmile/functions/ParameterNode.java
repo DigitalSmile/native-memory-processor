@@ -1,6 +1,6 @@
 package io.github.digitalsmile.functions;
 
-import io.github.digitalsmile.headers.type.OriginalType;
+import io.github.digitalsmile.headers.mapping.OriginalType;
 
 public record ParameterNode(String name, OriginalType typeMapping, boolean returns, boolean byAddress) {
 
