@@ -85,7 +85,7 @@ public class NativeProcessor extends AbstractProcessor {
                 processFunctions(rootElement, functionElements, packageName);
 
             } catch (Throwable e) {
-                e.printStackTrace();
+                printStackTrace(e);
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
             }
         }
