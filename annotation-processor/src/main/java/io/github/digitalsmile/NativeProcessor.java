@@ -14,16 +14,17 @@ import io.github.digitalsmile.annotation.structure.Structs;
 import io.github.digitalsmile.annotation.structure.Unions;
 import io.github.digitalsmile.composers.EnumComposer;
 import io.github.digitalsmile.composers.FunctionComposer;
+import io.github.digitalsmile.composers.OpaqueComposer;
 import io.github.digitalsmile.composers.StructComposer;
 import io.github.digitalsmile.functions.FunctionNode;
 import io.github.digitalsmile.functions.Library;
 import io.github.digitalsmile.functions.ParameterNode;
 import io.github.digitalsmile.headers.Parser;
-import io.github.digitalsmile.headers.model.NativeMemoryModel;
-import io.github.digitalsmile.headers.model.NativeMemoryNode;
+import io.github.digitalsmile.headers.mapping.FunctionOriginalType;
 import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
 import io.github.digitalsmile.headers.mapping.ObjectTypeMirror;
 import io.github.digitalsmile.headers.mapping.OriginalType;
+import io.github.digitalsmile.headers.model.NativeMemoryNode;
 import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.JextractTool;
 import org.openjdk.jextract.clang.Index;
@@ -44,9 +45,12 @@ import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 @GeneratePrism(NativeFunction.class)
 @SupportedSourceVersion(SourceVersion.RELEASE_22)
@@ -72,6 +76,7 @@ public class NativeProcessor extends AbstractProcessor {
                 if (nativeOptions != null && !nativeOptions.packageName().isEmpty()) {
                     packageName = nativeOptions.packageName();
                 }
+                PackageName.setDefaultPackageName(packageName);
 
                 processHeaderFiles(rootElement, headerFiles, packageName, nativeOptions);
 
@@ -80,6 +85,7 @@ public class NativeProcessor extends AbstractProcessor {
                 processFunctions(rootElement, functionElements, packageName);
 
             } catch (Throwable e) {
+                e.printStackTrace();
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
             }
         }
@@ -119,68 +125,84 @@ public class NativeProcessor extends AbstractProcessor {
         }
 
         boolean rootConstants = false;
+        boolean debug = false;
         List<String> includes = Collections.emptyList();
+        List<String> systemIncludes = Collections.emptyList();
         if (options != null) {
             rootConstants = options.processRootConstants();
             includes = Arrays.stream(options.includes()).map(p -> "-I" + p).toList();
+            systemIncludes = Arrays.stream(options.systemIncludes()).map(p -> "-isystem" + p).toList();
+            debug = options.debugMode();
         }
 
         Map<Path, Declaration.Scoped> allParsedHeaders = new HashMap<>();
 
         for (Path header : headerPaths) {
             try {
-                var parsed = JextractTool.parse(Path.of(header.toFile().getAbsolutePath()), includes);
+                var parsed = JextractTool.parse(Path.of(header.toFile().getAbsolutePath()), Stream.concat(includes.stream(), systemIncludes.stream()).toList());
                 allParsedHeaders.put(header, parsed);
             } catch (ExceptionInInitializerError | ClangException | TypeLayoutError | Index.ParsingFailedException e) {
+                if (debug) {
+                    printStackTrace(e);
+                }
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getCause().getMessage());
                 return;
             }
         }
-        var parser = new Parser(processingEnv.getMessager());
+        var parser = new Parser(packageName, processingEnv.getMessager(), processingEnv.getFiler());
         try {
-            var parsed = parser.parse(structs, enums, unions, allParsedHeaders);
-            for (NativeMemoryModel model : parsed) {
-                for (Map.Entry<Declaration.Scoped.Kind, List<NativeMemoryNode>> entry : model.nodes().entrySet()) {
-                    var kind = entry.getKey();
-                    switch (kind) {
-                        case STRUCT -> processStructs(packageName, entry.getValue());
-                        case ENUM -> processEnums(packageName, entry.getValue(), rootConstants);
-                        case UNION -> processUnions(packageName, entry.getValue());
+            var parsed = parser.parse(structs, enums, unions, allParsedHeaders, debug);
+            for (NativeMemoryNode rootNode : parsed) {
+                for (NativeMemoryNode node : rootNode.nodes()) {
+                    switch (node.getNodeType()) {
+                        case STRUCT -> processStructs(node);
+                        case ENUM -> processEnums(node, rootConstants);
+                        case UNION -> processUnions(node);
+                        case OPAQUE -> processOpaque(node);
                     }
                 }
             }
         } catch (Throwable e) {
+            if (debug) {
+                printStackTrace(e);
+            }
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
         }
     }
 
-    private void processStructs(String packageName, List<NativeMemoryNode> nodes) {
-        for (NativeMemoryNode node : nodes) {
-            var structComposer = new StructComposer(processingEnv.getMessager());
-            var output = structComposer.compose(packageName, PrettyName.getObjectName(node.getName()), node);
-            createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
-        }
+    private void processOpaque(NativeMemoryNode node) {
+        var opaqueComposer = new OpaqueComposer(processingEnv.getMessager());
+        var output = opaqueComposer.compose(PrettyName.getObjectName(node.getName()), node);
+        createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
     }
 
-    private void processEnums(String packageName, List<NativeMemoryNode> nodes, boolean rootConstants) {
-        for (NativeMemoryNode node : nodes) {
-            if (node.getName().contains("Constants")) {
-                if (!rootConstants) {
-                    continue;
-                }
+    private void processStructs(NativeMemoryNode node) {
+        if (node.nodes().stream().anyMatch(n -> n.getType() instanceof FunctionOriginalType)) {
+            return;
+        }
+        var structComposer = new StructComposer(processingEnv.getMessager());
+        var output = structComposer.compose(PrettyName.getObjectName(node.getName()), node);
+        createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
+    }
+
+    private void processEnums(NativeMemoryNode node, boolean rootConstants) {
+        if (node.getName().contains("Constants")) {
+            if (!rootConstants) {
+                return;
             }
-            var enumComposer = new EnumComposer(processingEnv.getMessager());
-            var output = enumComposer.compose(packageName, PrettyName.getObjectName(node.getName()), node);
-            createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
         }
+        if (node.nodes().isEmpty()) {
+            return;
+        }
+        var enumComposer = new EnumComposer(processingEnv.getMessager());
+        var output = enumComposer.compose(PrettyName.getObjectName(node.getName()), node);
+        createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
     }
 
-    private void processUnions(String packageName, List<NativeMemoryNode> nodes) {
-        for (NativeMemoryNode node : nodes) {
-            var structComposer = new StructComposer(processingEnv.getMessager());
-            var output = structComposer.compose(packageName, PrettyName.getObjectName(node.getName()), node);
-            createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
-        }
+    private void processUnions(NativeMemoryNode node) {
+        var structComposer = new StructComposer(processingEnv.getMessager(), true);
+        var output = structComposer.compose(PrettyName.getObjectName(node.getName()), node);
+        createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
     }
 
     private void processFunctions(Element rootElement, List<Element> functionElements, String packageName) {
@@ -313,5 +335,14 @@ public class NativeProcessor extends AbstractProcessor {
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Exception occurred while processing file '" + fileName + "': " + e.getMessage());
         }
+    }
+
+    private void printStackTrace(Throwable exception) {
+        var writer = new StringWriter();
+        var printWriter = new PrintWriter(writer);
+        exception.printStackTrace(printWriter);
+        printWriter.flush();
+
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, writer.toString());
     }
 }

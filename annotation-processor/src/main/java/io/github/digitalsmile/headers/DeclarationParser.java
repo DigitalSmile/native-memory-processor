@@ -1,23 +1,21 @@
 package io.github.digitalsmile.headers;
 
 import io.github.digitalsmile.NativeProcessor;
-import io.github.digitalsmile.PrettyName;
-import io.github.digitalsmile.headers.model.NativeMemoryNode;
-import io.github.digitalsmile.headers.mapping.NodeType;
-import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
+import io.github.digitalsmile.PackageName;
+import io.github.digitalsmile.headers.model.NodeType;
 import io.github.digitalsmile.headers.mapping.OriginalType;
+import io.github.digitalsmile.headers.model.NativeMemoryNode;
 import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.Type;
 
 import javax.annotation.processing.Messager;
 import javax.tools.Diagnostic;
-import java.nio.file.Path;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.stream.Stream;
 
 public class DeclarationParser {
-    private final Map<Declaration.Scoped.Kind, List<NativeMemoryNode>> model = new HashMap<>();
-    private final Path headerPath;
     private final List<NativeProcessor.Type> structs;
     private final List<NativeProcessor.Type> unions;
     private final List<NativeProcessor.Type> enums;
@@ -27,9 +25,8 @@ public class DeclarationParser {
     private final boolean parseNoEnums;
     private final boolean parseNoUnions;
 
-    public DeclarationParser(Messager messager, Path headerPath, List<NativeProcessor.Type> structs, List<NativeProcessor.Type> enums, List<NativeProcessor.Type> unions) {
+    public DeclarationParser(Messager messager, List<NativeProcessor.Type> structs, List<NativeProcessor.Type> enums, List<NativeProcessor.Type> unions) {
         this.messager = messager;
-        this.headerPath = headerPath;
 
         this.parseNoStructs = structs == null;
         this.parseNoEnums = enums == null;
@@ -40,184 +37,179 @@ public class DeclarationParser {
         this.enums = enums != null ? enums : Collections.emptyList();
     }
 
-    private boolean declarationInFile(Declaration declaration) {
-        return declaration.pos().path().equals(headerPath);
-    }
-
-    public Map<Declaration.Scoped.Kind, List<NativeMemoryNode>> getModel() {
-        return model;
+    private boolean notInScope(Declaration declaration) {
+        return declaration.pos().isSystemHeader();
     }
 
     private int structCount = 0;
     private int enumCount = 0;
     private int unionCount = 0;
 
-    public void parseDeclaration(Declaration.Scoped parent, NativeMemoryNode parentNode) {
+    public void parseRoot(Declaration.Scoped root, NativeMemoryNode rootNode) {
+        parseDeclarations(root, rootNode, true);
+    }
+
+    public void parseDeclarations(Declaration.Scoped parent, NativeMemoryNode parentNode, boolean skipSystemHeaders) {
         for (Declaration declaration : parent.members()) {
-            if (!declarationInFile(declaration)) {
+            if (skipSystemHeaders && notInScope(declaration)) {
                 continue;
             }
-            var contains = Stream.of(structs, enums, unions).flatMap(List::stream).filter(t -> t.name().equals(declaration.name())).findFirst().orElse(null) != null;
-            switch (declaration) {
-                case Declaration.Scoped declarationScoped -> {
-                    var nodeType = getNodeType(declarationScoped.kind(), declarationScoped.attributes());
-                    switch (declarationScoped.kind()) {
-                        case STRUCT -> {
-                            if (parseNoStructs) {
-                                continue;
-                            }
-                            if (!contains && !structs.isEmpty()) {
-                                continue;
-                            }
-                            if (parent.kind().equals(Declaration.Scoped.Kind.TOPLEVEL)) {
-                                var structNode = new NativeMemoryNode(declarationScoped.name(), nodeType, OriginalType.ofObject(declarationScoped.name()), declarationScoped.pos().toString());
-                                parseDeclaration(declarationScoped, structNode);
-                                model.computeIfAbsent(Declaration.Scoped.Kind.STRUCT, _ -> new ArrayList<>()).add(structNode);
-                            } else {
-                                var structNode = new NativeMemoryNode("struct_" + structCount++, nodeType, OriginalType.ofObject(declarationScoped.name()), declarationScoped.pos().toString());
-                                parseDeclaration(declarationScoped, structNode);
-                                parentNode.addNode(structNode);
-                            }
-                        }
-                        case ENUM -> {
-                            if (parseNoEnums) {
-                                continue;
-                            }
-                            if (!contains && !enums.isEmpty()) {
-                                continue;
-                            }
-                            if (parent.kind().equals(Declaration.Scoped.Kind.TOPLEVEL)) {
-                                var name = declarationScoped.name();
-                                OriginalType type;
-                                if (name.startsWith("enum (unnamed")) {
-                                    name = PrettyName.getObjectName(parentNode.getName()) + "Enum" + enumCount++;
-                                    type = new ObjectOriginalType(name);
-                                } else {
-                                    type = OriginalType.ofObject(name);
-                                }
-                                var structNode = new NativeMemoryNode(name, nodeType, type, declarationScoped.pos().toString());
-                                parseDeclaration(declarationScoped, structNode);
-                                model.computeIfAbsent(Declaration.Scoped.Kind.ENUM, _ -> new ArrayList<>()).add(structNode);
-                            } else {
-                                var name = "enum_" + enumCount++;
-                                OriginalType type;
-                                if (nodeType.equals(NodeType.ANON_ENUM)) {
-                                    type = new ObjectOriginalType(name);
-                                } else {
-                                    type = OriginalType.ofObject(declarationScoped.name());
-                                }
-                                var enumNode = new NativeMemoryNode(name, nodeType, type, declarationScoped.pos().toString());
-                                parseDeclaration(declarationScoped, enumNode);
-                                parentNode.addNode(enumNode);
-                            }
-                        }
-                        case UNION -> {
-                            if (parseNoUnions) {
-                                continue;
-                            }
-                            if (!contains && !unions.isEmpty()) {
-                                continue;
-                            }
-                            if (parent.kind().equals(Declaration.Scoped.Kind.TOPLEVEL)) {
-                                OriginalType type;
-                                var name = declarationScoped.name();
-                                if (name.startsWith("union (unnamed")) {
-                                    name = PrettyName.getObjectName(parentNode.getName()) + "Union" + enumCount++;
-                                    type = new ObjectOriginalType(name);
-                                } else {
-                                    type = OriginalType.ofObject(name);
-                                }
-                                var structNode = new NativeMemoryNode(name, nodeType, type, declarationScoped.pos().toString());
-                                parseDeclaration(declarationScoped, structNode);
-                                model.computeIfAbsent(Declaration.Scoped.Kind.UNION, _ -> new ArrayList<>()).add(structNode);
-                            } else {
-                                var name = "union_" + unionCount++;
-                                OriginalType type;
-                                if (nodeType.equals(NodeType.ANON_UNION)) {
-                                    type = new ObjectOriginalType(name);
-                                } else {
-                                    type = OriginalType.ofObject(declarationScoped.name());
-                                }
-                                var unionNode = new NativeMemoryNode(name, nodeType, type, declarationScoped.pos().toString());
-                                parseDeclaration(declarationScoped, unionNode);
-                                parentNode.addNode(unionNode);
-                            }
-                        }
-                        default ->
-                                messager.printMessage(Diagnostic.Kind.WARNING, "unsupported scoped kind " + declarationScoped.kind() + " " + declarationScoped.pos());
-                    }
-                }
-                case Declaration.Constant declarationConstant ->
-                        parentNode.addNode(parseVariable(declarationConstant, declarationConstant.type()));
-                case Declaration.Bitfield declarationBitfield ->
-                        messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration type " + declarationBitfield.type());
-                case Declaration.Variable declarationVariable -> {
-                    switch (declarationVariable.kind()) {
-                        case FIELD -> {
-                            var node = parseVariable(declarationVariable, declarationVariable.type());
-                            parentNode.addNode(node);
-                        }
-                        default ->
-                                messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration kind " + declarationVariable.kind() + " " + declarationVariable.pos());
-
-                    }
-                }
-                case Declaration.Typedef declarationTypedef -> {
-                    var node = parseVariable(declarationTypedef, declarationTypedef.type());
-                    parentNode.addNode(node);
-                }
-                case Declaration.Function _ -> {
-                }
-                default ->
-                        messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration type " + declaration.name() + " " + declaration.pos());
-
-            }
-        }
-        if (!parentNode.nodes().isEmpty() && parent.kind().equals(Declaration.Scoped.Kind.TOPLEVEL)) {
-            var node = new NativeMemoryNode(PrettyName.getObjectName(parentNode.getName()) + "Constants", NodeType.ENUM, null, parent.pos().toString());
-            node.nodes().addAll(parentNode.nodes());
-            model.computeIfAbsent(Declaration.Scoped.Kind.ENUM, _ -> new ArrayList<>()).add(node);
+            parseDeclaration(declaration, parentNode, parent.kind().equals(Declaration.Scoped.Kind.TOPLEVEL));
         }
     }
 
-    private NativeMemoryNode parseVariable(Declaration declaration, Type type) {
+    private boolean skipParsing(String declarationName, Declaration.Scoped.Kind kind) {
+        var contains = Stream.of(structs, enums, unions).flatMap(List::stream).filter(t -> t.name().equals(declarationName)).findFirst().orElse(null) != null;
+        return switch (kind) {
+            case STRUCT -> parseNoStructs || (!contains && !structs.isEmpty());
+            case ENUM -> parseNoEnums || (!contains && !enums.isEmpty());
+            case UNION -> parseNoUnions || (!contains && !unions.isEmpty());
+            default -> true;
+        };
+    }
+
+    private String parseScoped(Declaration.Scoped declarationScoped, NodeType nodeType, String namePrefix) {
+        var name = declarationScoped.name();
+        switch (declarationScoped.kind()) {
+            case STRUCT -> {
+                if (nodeType.isAnonymous()) {
+                    name = namePrefix + "_struct_" + structCount++;
+                }
+                PackageName.addPackage(name, nodeType.equals(NodeType.OPAQUE) ? "opaque" : "structs");
+            }
+            case ENUM -> {
+                if (nodeType.isAnonymous()) {
+                    name = namePrefix + "_enum_" + enumCount++;
+                }
+                PackageName.addPackage(name, "enums");
+            }
+            case UNION -> {
+                if (nodeType.isAnonymous()) {
+                    name = namePrefix + "_union_" + unionCount++;
+                }
+                PackageName.addPackage(name, "unions");
+            }
+            case BITFIELDS -> {
+                messager.printMessage(Diagnostic.Kind.WARNING, "unsupported scoped kind " + declarationScoped.kind() + " " + declarationScoped.pos());
+                return name;
+            }
+        }
+        return name;
+    }
+
+    public void parseDeclaration(Declaration declaration, NativeMemoryNode parentNode, boolean isTopLevel) {
+        switch (declaration) {
+            case Declaration.Scoped declarationScoped -> {
+                if (skipParsing(declaration.name(), declarationScoped.kind())) {
+                    return;
+                }
+                var nodeType = getNodeType(declarationScoped, declarationScoped.attributes());
+                var namePrefix = isTopLevel ? parentNode.getName() : "internal";
+                var name = parseScoped(declarationScoped, nodeType, namePrefix);
+                var node = new NativeMemoryNode(name, nodeType, OriginalType.ofObject(name), parentNode.getLevel() + 1, declarationScoped.pos());
+                parseRoot(declarationScoped, node);
+                parentNode.addNode(node);
+            }
+            case Declaration.Constant declarationConstant -> {
+                var node = parseVariable(declarationConstant, declarationConstant.type(), parentNode.getLevel());
+                if (node == null) {
+                    return;
+                }
+                if (isTopLevel) {
+                    var constantsEnum = parentNode.nodes().stream().filter(p -> p.getName().equals(parentNode.getName() + "_constants")).findFirst();
+                    if (constantsEnum.isPresent()) {
+                        constantsEnum.get().addNode(node);
+                    } else {
+                        var enumNode = new NativeMemoryNode(parentNode.getName() + "_constants", NodeType.ENUM);
+                        enumNode.addNode(node);
+                        parentNode.addNode(enumNode);
+                    }
+                } else {
+                    parentNode.addNode(node);
+                }
+            }
+            case Declaration.Bitfield declarationBitfield ->
+                    messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration type " + declarationBitfield.type());
+            case Declaration.Variable declarationVariable -> {
+                switch (declarationVariable.kind()) {
+                    case GLOBAL, BITFIELD, PARAMETER ->
+                            messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration kind " + declarationVariable.kind() + " " + declarationVariable.pos());
+                    case FIELD -> {
+                        var node = parseVariable(declarationVariable, declarationVariable.type(), parentNode.getLevel());
+                        if (node != null) {
+                            parentNode.addNode(node);
+                        }
+                    }
+                }
+            }
+            case Declaration.Typedef declarationTypedef -> {
+                var node = parseVariable(declarationTypedef, declarationTypedef.type(), parentNode.getLevel());
+                if (node != null) {
+                    parentNode.addNode(node);
+                }
+            }
+            case Declaration.Function _ -> {
+            }
+            default ->
+                    messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration type " + declaration.name() + " " + declaration.pos());
+
+        }
+    }
+
+
+    private NativeMemoryNode parseVariable(Declaration declaration, Type type, int level) {
         if (type.isErroneous()) {
-            printError(declaration, "type " + type + " is erroneous");
+            printWarning(declaration, "type " + type + " is not valid C/C++ constructions and will be skipped.");
             return null;
         }
+        var nextLevel = level + 1;
+        var source = declaration.pos();
         switch (type) {
             case Type.Array typeArray -> {
-                if (typeArray.elementType().isErroneous()) {
-                    printError(declaration, "type " + type + " is erroneous");
-                    return null;
-                }
-                return new NativeMemoryNode(declaration.name(), NodeType.VARIABLE, OriginalType.of(typeArray), declaration.pos().toString());
+                return new NativeMemoryNode(declaration.name(), OriginalType.of(typeArray), nextLevel, source);
             }
             case Type.Primitive typePrimitive -> {
                 if (declaration instanceof Declaration.Constant declarationConstant) {
-                    return new NativeMemoryNode(declaration.name(), NodeType.VARIABLE, OriginalType.of(typePrimitive), declaration.pos().toString(), declarationConstant.value());
+                    return new NativeMemoryNode(declaration.name(), OriginalType.of(typePrimitive), nextLevel, source, declarationConstant.value());
                 } else {
-                    return new NativeMemoryNode(declaration.name(), NodeType.VARIABLE, OriginalType.of(typePrimitive), declaration.pos().toString());
+                    return new NativeMemoryNode(declaration.name(), OriginalType.of(typePrimitive), nextLevel, source);
                 }
             }
             case Type.Delegated typeDelegated -> {
                 switch (typeDelegated.kind()) {
                     case SIGNED, UNSIGNED -> {
                         if (declaration instanceof Declaration.Constant declarationConstant) {
-                            return new NativeMemoryNode(declaration.name(), NodeType.VARIABLE, OriginalType.of(typeDelegated), declaration.pos().toString(), declarationConstant.value());
+                            return new NativeMemoryNode(declaration.name(), OriginalType.of(typeDelegated), nextLevel, source, declarationConstant.value());
                         } else {
-                            return new NativeMemoryNode(declaration.name(), NodeType.VARIABLE, OriginalType.of(typeDelegated), declaration.pos().toString());
+                            return new NativeMemoryNode(declaration.name(), OriginalType.of(typeDelegated), nextLevel, source);
                         }
                     }
                     case POINTER, TYPEDEF -> {
-                        return new NativeMemoryNode(declaration.name(), NodeType.VARIABLE, OriginalType.of(typeDelegated.type()), declaration.pos().toString());
+                        if (declaration instanceof Declaration.Constant declarationConstant) {
+                            var originalType = OriginalType.of(typeDelegated.type());
+                            if (originalType.carrierClass().equals(byte.class)) {
+                                originalType = OriginalType.ofObject(String.class.getSimpleName());
+                            }
+                            return new NativeMemoryNode(declaration.name(), originalType, nextLevel, source, declarationConstant.value());
+                        } else {
+                            return new NativeMemoryNode(declaration.name(), OriginalType.of(typeDelegated.type()), nextLevel, source);
+                        }
                     }
                     default -> printWarning(declaration, "unsupported variable kind " + typeDelegated.kind());
                 }
             }
             case Type.Declared typeDeclared -> {
-                var node = new NativeMemoryNode(declaration.name(), NodeType.VARIABLE, OriginalType.of(typeDeclared), declaration.pos().toString());
-                parseDeclaration(typeDeclared.tree(), node);
+                var typeName = typeDeclared.tree().name();
+                var nodeType = getNodeType(typeDeclared.tree(), declaration.attributes());
+                if (nodeType.isAnonymous()) {
+                    typeName = "_" + declaration.name();
+                }
+                var node = new NativeMemoryNode(declaration.name(), nodeType, OriginalType.ofObject(typeName), nextLevel, source);
+                if (nodeType.isAnonymous()) {
+                    parseRoot(typeDeclared.tree(), node);
+                } else if (notInScope(typeDeclared.tree())) {
+                    parseDeclarations(typeDeclared.tree(), node, false);
+                }
                 return node;
             }
             default -> printWarning(declaration, "unknown field type " + type);
@@ -225,25 +217,39 @@ public class DeclarationParser {
         return null;
     }
 
-    private NodeType getNodeType(Declaration.Scoped.Kind kind, Collection<Record> attributes) {
+    private NodeType getNodeType(Declaration.Scoped declaration, Collection<Record> attributes) {
+        if (declaration.members().isEmpty()) {
+            return NodeType.OPAQUE;
+        }
         var it = attributes.iterator();
         var isAnonymous = false;
         while (it.hasNext()) {
-            var r = it.next();
-            if (r.getClass().getSimpleName().equals("AnonymousStruct")) {
+            var name = it.next().getClass().getSimpleName();
+            if (name.equals("AnonymousStruct") || declaration.name().contains("(unnamed at")) {
                 isAnonymous = true;
-                break;
             }
         }
-        switch (kind) {
+        switch (declaration.kind()) {
             case STRUCT -> {
-                return isAnonymous ? NodeType.ANON_STRUCT : NodeType.STRUCT;
+                if (isAnonymous) {
+                    return NodeType.ANON_STRUCT;
+                } else {
+                    return NodeType.STRUCT;
+                }
             }
             case ENUM -> {
-                return isAnonymous ? NodeType.ANON_ENUM : NodeType.ENUM;
+                if (isAnonymous) {
+                    return NodeType.ANON_ENUM;
+                } else {
+                    return NodeType.ENUM;
+                }
             }
             case UNION -> {
-                return isAnonymous ? NodeType.ANON_UNION : NodeType.UNION;
+                if (isAnonymous) {
+                    return NodeType.ANON_UNION;
+                } else {
+                    return NodeType.UNION;
+                }
             }
             default -> {
                 return NodeType.VARIABLE;
@@ -252,7 +258,7 @@ public class DeclarationParser {
     }
 
     private void printError(Declaration declaration, String message) {
-        messager.printMessage(Diagnostic.Kind.ERROR, declaration.pos() + ": " + message);
+        messager.printMessage(Diagnostic.Kind.ERROR, declaration.pos() + " " + declaration.name() + ": " + message);
     }
 
     private void printWarning(Declaration declaration, String message) {

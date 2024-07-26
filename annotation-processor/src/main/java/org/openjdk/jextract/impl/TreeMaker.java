@@ -26,14 +26,7 @@
 package org.openjdk.jextract.impl;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.OptionalLong;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -41,14 +34,7 @@ import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.Position;
 import org.openjdk.jextract.Type;
 import org.openjdk.jextract.Type.Declared;
-import org.openjdk.jextract.clang.Cursor;
-import org.openjdk.jextract.clang.CursorKind;
-import org.openjdk.jextract.clang.CursorLanguage;
-import org.openjdk.jextract.clang.LinkageKind;
-import org.openjdk.jextract.clang.PrintingPolicy;
-import org.openjdk.jextract.clang.PrintingPolicyProperty;
-import org.openjdk.jextract.clang.SourceLocation;
-import org.openjdk.jextract.clang.TypeKind;
+import org.openjdk.jextract.clang.*;
 import org.openjdk.jextract.impl.DeclarationImpl.AnonymousStruct;
 import org.openjdk.jextract.impl.DeclarationImpl.ClangAlignOf;
 import org.openjdk.jextract.impl.DeclarationImpl.ClangOffsetOf;
@@ -65,7 +51,8 @@ class TreeMaker {
 
     private final Map<Cursor.Key, Declaration> declarationCache = new HashMap<>();
 
-    public TreeMaker() { }
+    public TreeMaker() {
+    }
 
     Declaration addAttributes(Declaration d, Cursor c) {
         if (d == null) return null;
@@ -148,6 +135,8 @@ class TreeMaker {
         private final Path path;
         private final int line;
         private final int column;
+        private final boolean isSystemHeader;
+        private String comment = "";
 
         private CursorPosition(Cursor cursor) {
             this.cursor = cursor;
@@ -155,6 +144,16 @@ class TreeMaker {
             this.path = loc.path().toAbsolutePath();
             this.line = loc.line();
             this.column = loc.column();
+            this.isSystemHeader = cursor.getSourceLocation().isInSystemHeader();
+            this.comment = cursor.getComment()
+                    .replace("/**", "")
+                    .replace("/*", "")
+                    .replace("*/", "")
+                    .stripIndent()
+                    .strip()
+                    .replaceAll("\\* ", "")
+                    .replaceAll("\\*", "")
+                    .strip();
         }
 
         static Position of(Cursor cursor) {
@@ -185,6 +184,16 @@ class TreeMaker {
             return column;
         }
 
+        @Override
+        public boolean isSystemHeader() {
+            return isSystemHeader;
+        }
+
+        @Override
+        public String comment() {
+            return comment;
+        }
+
         public Cursor cursor() {
             return cursor;
         }
@@ -194,8 +203,8 @@ class TreeMaker {
             if (this == obj) return true;
             if (obj instanceof Position pos) {
                 return Objects.equals(path, pos.path()) &&
-                    Objects.equals(line, pos.line()) &&
-                    Objects.equals(column, pos.col());
+                        Objects.equals(line, pos.line()) &&
+                        Objects.equals(column, pos.col());
             }
             return false;
         }
@@ -214,12 +223,12 @@ class TreeMaker {
     public Declaration.Function createFunction(Cursor c) {
         checkCursor(c, CursorKind.FunctionDecl);
         List<Declaration.Variable> params = new ArrayList<>();
-        for (int i = 0 ; i < c.numberOfArgs() ; i++) {
-            params.add((Declaration.Variable)createTree(c.getArgument(i)));
+        for (int i = 0; i < c.numberOfArgs(); i++) {
+            params.add((Declaration.Variable) createTree(c.getArgument(i)));
         }
         Type type = toType(c);
         Type funcType = canonicalType(type);
-        return withNestedTypes(Declaration.function(CursorPosition.of(c), c.spelling(), (Type.Function)funcType,
+        return withNestedTypes(Declaration.function(CursorPosition.of(c), c.spelling(), (Type.Function) funcType,
                 params.toArray(new Declaration.Variable[0])), c, true);
     }
 

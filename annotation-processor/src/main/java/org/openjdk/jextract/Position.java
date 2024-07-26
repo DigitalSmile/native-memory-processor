@@ -52,6 +52,10 @@ public interface Position {
      */
     int col();
 
+    boolean isSystemHeader();
+
+    String comment();
+
     /**
      * An empty position instance; this can be used to model <em>synthetic</em> program elements which are not
      * defined in any input file.
@@ -70,6 +74,16 @@ public interface Position {
         @Override
         public int col() {
             return 0;
+        }
+
+        @Override
+        public boolean isSystemHeader() {
+            return false;
+        }
+
+        @Override
+        public String comment() {
+            return "";
         }
 
         @Override

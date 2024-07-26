@@ -100,6 +100,7 @@ public class Index extends ClangDisposable {
     private int defaultOptions(boolean detailedPreprocessorRecord) {
         int rv = Index_h.CXTranslationUnit_ForSerialization();
         rv |= Index_h.CXTranslationUnit_SkipFunctionBodies();
+        rv |= Index_h.CXTranslationUnit_IncludeBriefCommentsInCodeCompletion();
         if (detailedPreprocessorRecord) {
             rv |= Index_h.CXTranslationUnit_DetailedPreprocessingRecord();
         }

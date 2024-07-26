@@ -1,4 +1,4 @@
-package io.github.digitalsmile;
+package io.github.digitalsmile.library;
 
 import java.util.Locale;
 

@@ -18,4 +18,9 @@ public record FunctionOriginalType() implements OriginalType {
     public ValueLayout valueLayout() {
         return ValueLayout.ADDRESS;
     }
+
+    @Override
+    public String toString() {
+        return "function type (unsupported)";
+    }
 }

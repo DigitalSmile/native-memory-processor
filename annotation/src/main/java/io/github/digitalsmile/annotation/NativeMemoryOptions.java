@@ -23,4 +23,7 @@ public @interface NativeMemoryOptions {
     String packageName() default "";
 
     String[] includes() default {};
+    String[] systemIncludes() default {};
+
+    boolean debugMode() default false;
 }

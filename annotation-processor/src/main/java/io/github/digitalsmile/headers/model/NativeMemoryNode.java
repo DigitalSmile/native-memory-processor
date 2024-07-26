@@ -1,29 +1,44 @@
 package io.github.digitalsmile.headers.model;
 
-import io.github.digitalsmile.headers.mapping.NodeType;
 import io.github.digitalsmile.headers.mapping.OriginalType;
+import org.barfuin.texttree.api.Node;
+import org.openjdk.jextract.Position;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class NativeMemoryNode {
+public class NativeMemoryNode implements Node {
     private final String name;
     private final List<NativeMemoryNode> nodes = new ArrayList<>();
     private final NodeType nodeType;
     private final OriginalType type;
     private final Object value;
-    private final String source;
+    private final int level;
+    private final Position position;
 
-    public NativeMemoryNode(String name, NodeType nodeType, OriginalType type, String source, Object value) {
+    public NativeMemoryNode(String name, NodeType nodeType, OriginalType type, int level, Position position, Object value) {
         this.name = name;
         this.nodeType = nodeType;
         this.type = type;
-        this.source = source;
+        this.level = level;
+        this.position = position;
         this.value = value;
     }
 
-    public NativeMemoryNode(String name, NodeType nodeType, OriginalType type, String source) {
-        this(name, nodeType, type, source, null);
+    public NativeMemoryNode(String name, OriginalType type, int level, Position position, Object value) {
+        this(name, NodeType.VARIABLE, type, level, position, value);
+    }
+
+    public NativeMemoryNode(String name, OriginalType type, int level, Position position) {
+        this(name, NodeType.VARIABLE, type, level, position, null);
+    }
+
+    public NativeMemoryNode(String name, NodeType nodeType, OriginalType type, int level, Position position) {
+        this(name, nodeType, type, level, position, null);
+    }
+
+    public NativeMemoryNode(String name, NodeType nodeType) {
+        this(name, nodeType, null, 0, Position.NO_POSITION, null);
     }
 
     public String getName() {
@@ -42,8 +57,12 @@ public class NativeMemoryNode {
         return value;
     }
 
-    public String getSource() {
-        return source;
+    public int getLevel() {
+        return level;
+    }
+
+    public Position getPosition() {
+        return position;
     }
 
     public void addNode(NativeMemoryNode node) {
@@ -61,5 +80,34 @@ public class NativeMemoryNode {
     @Override
     public String toString() {
         return name + " (" + (nodeType.equals(NodeType.VARIABLE) ? type : nodeType) + ")" + (!nodes.isEmpty() ? ": " + nodes.size() + " " + nodes : "");
+    }
+
+    @Override
+    public String getText() {
+        var builder = new StringBuilder();
+        builder.append(name);
+        if (!nodeType.equals(NodeType.VARIABLE) && !nodeType.equals(NodeType.ROOT) && level <= 1) {
+            builder.append(" ").append(nodeType).append(" from ").append(position.path());
+        } else if (!nodeType.equals(NodeType.ROOT)) {
+            builder.append(" ");
+            if (!nodeType.equals(NodeType.VARIABLE)) {
+                builder.append(nodeType);
+                if (!nodeType.isAnonymous()) {
+                    builder.append(" of type ").append(type);
+                }
+            } else {
+                builder.append("(").append(type).append(")");
+                if (value != null) {
+                    builder.append(" ").append(value);
+                }
+            }
+        }
+
+        return builder.toString();
+    }
+
+    @Override
+    public Iterable<? extends Node> getChildren() {
+        return nodes;
     }
 }

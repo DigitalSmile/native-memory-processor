@@ -63,7 +63,9 @@ public final class Cursor extends ClangDisposable.Owned {
         return Index_h.clang_isCursorDefinition(segment) != 0;
     }
 
-    public boolean isAttribute() { return Index_h.clang_isAttribute(kind) != 0; }
+    public boolean isAttribute() {
+        return Index_h.clang_isAttribute(kind) != 0;
+    }
 
     public boolean isAnonymousStruct() {
         return Index_h.clang_Cursor_isAnonymousRecordDecl(segment) != 0;
@@ -96,6 +98,14 @@ public final class Cursor extends ClangDisposable.Owned {
         try (PrintingPolicy policy = getPrintingPolicy()) {
             return prettyPrinted(policy);
         }
+    }
+
+    public String getComment() {
+        var comment = Index_h.clang_Cursor_getRawCommentText(LibClang.STRING_ALLOCATOR, segment);
+        if (comment.getString(0).isEmpty()) {
+            return "";
+        }
+        return LibClang.CXStrToString(comment);
     }
 
     public String displayName() {
@@ -330,7 +340,7 @@ public final class Cursor extends ClangDisposable.Owned {
 
         private MemorySegment toSegment(SegmentAllocator allocator) {
             return allocator.allocateFrom(Index_h.C_CHAR, payload,
-                                          Index_h.C_CHAR, 0, CXCursor.sizeof());
+                    Index_h.C_CHAR, 0, CXCursor.sizeof());
         }
 
         private static final MemorySegment COMPARISON_SEGMENT = Arena.ofAuto().allocate(CXCursor.layout(), 2);

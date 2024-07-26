@@ -2,6 +2,7 @@ package io.github.digitalsmile.headers.mapping;
 
 import com.squareup.javapoet.CodeBlock;
 
+import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 
 public record PrimitiveOriginalType(String typeName, ValueLayout valueLayout) implements OriginalType {
@@ -33,6 +34,10 @@ public record PrimitiveOriginalType(String typeName, ValueLayout valueLayout) im
             casting = "(short) ";
         } else if (valueLayout.carrier().equals(byte.class)) {
             casting = "(byte) ";
+        } else if (valueLayout.carrier().equals(boolean.class)) {
+            return CodeBlock.builder().add("false").build();
+        } else if (valueLayout.carrier().equals(MemorySegment.class)) {
+            return CodeBlock.builder().add("MemorySegment.NULL").build();
         }
         return CodeBlock.builder().add("$L", casting + "0").build();
     }
@@ -40,11 +45,21 @@ public record PrimitiveOriginalType(String typeName, ValueLayout valueLayout) im
 
 
     public CodeBlock isEmpty() {
+        if (valueLayout.carrier().equals(boolean.class)) {
+            return CodeBlock.builder().add(" == false").build();
+        } else if (valueLayout.carrier().equals(MemorySegment.class)) {
+            return CodeBlock.builder().add(" == MemorySegment.NULL").build();
+        }
         return CodeBlock.builder().add(" == 0").build();
     }
 
 
     public CodeBlock isNotEmpty() {
+        if (valueLayout.carrier().equals(boolean.class)) {
+            return CodeBlock.builder().add(" != false").build();
+        } else if (valueLayout.carrier().equals(MemorySegment.class)) {
+            return CodeBlock.builder().add(" != MemorySegment.NULL").build();
+        }
         return CodeBlock.builder().add(" > 0").build();
     }
 

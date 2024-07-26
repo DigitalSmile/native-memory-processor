@@ -16,6 +16,7 @@ dependencies {
 
     annotationProcessor 'io.avaje:avaje-prisms:1.28'
     implementation 'io.avaje:avaje-prisms:1.28'
+    implementation 'org.barfuin.texttree:text-tree:2.1.2'
 
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'

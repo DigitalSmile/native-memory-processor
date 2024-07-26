@@ -8316,6 +8316,103 @@ public class Index_h {
         }
     }
 
+
+    private static class clang_Cursor_getBriefCommentText$constants {
+        public static final FunctionDescriptor DESC = FunctionDescriptor.of(
+                CXString.layout(),
+                CXCursor.layout()
+        );
+
+        public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(
+                Index_h.findOrThrow("clang_Cursor_getBriefCommentText"),
+                DESC);
+    }
+
+    /**
+     * Function descriptor for:
+     * {@snippet lang=c :
+     * CXString clang_getCursorSpelling(CXCursor)
+     * }
+     */
+    public static FunctionDescriptor clang_Cursor_getBriefCommentText$descriptor() {
+        return clang_Cursor_getBriefCommentText$constants.DESC;
+    }
+
+    /**
+     * Downcall method handle for:
+     * {@snippet lang=c :
+     * CXString clang_getCursorSpelling(CXCursor)
+     * }
+     */
+    public static MethodHandle clang_Cursor_getBriefCommentText$handle() {
+        return clang_Cursor_getBriefCommentText$constants.HANDLE;
+    }
+    /**
+     * {@snippet lang=c :
+     * CXString clang_getCursorSpelling(CXCursor)
+     * }
+     */
+    public static MemorySegment clang_Cursor_getBriefCommentText(SegmentAllocator allocator, MemorySegment x0) {
+        var mh$ = clang_Cursor_getBriefCommentText$constants.HANDLE;
+        try {
+            if (TRACE_DOWNCALLS) {
+                traceDowncall("clang_Cursor_getBriefCommentText", allocator, x0);
+            }
+            return (MemorySegment)mh$.invokeExact(allocator, x0);
+        } catch (Throwable ex$) {
+            throw new AssertionError("should not reach here", ex$);
+        }
+    }
+
+
+    //*****
+    private static class clang_Cursor_getRawCommentText$constants {
+        public static final FunctionDescriptor DESC = FunctionDescriptor.of(
+                CXString.layout(),
+                CXCursor.layout()
+        );
+
+        public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(
+                Index_h.findOrThrow("clang_Cursor_getRawCommentText"),
+                DESC);
+    }
+
+    /**
+     * Function descriptor for:
+     * {@snippet lang=c :
+     * CXString clang_getCursorSpelling(CXCursor)
+     * }
+     */
+    public static FunctionDescriptor clang_Cursor_getRawCommentText$descriptor() {
+        return clang_Cursor_getRawCommentText$constants.DESC;
+    }
+
+    /**
+     * Downcall method handle for:
+     * {@snippet lang=c :
+     * CXString clang_getCursorSpelling(CXCursor)
+     * }
+     */
+    public static MethodHandle clang_Cursor_getRawCommentText$handle() {
+        return clang_Cursor_getRawCommentText$constants.HANDLE;
+    }
+    /**
+     * {@snippet lang=c :
+     * CXString clang_getCursorSpelling(CXCursor)
+     * }
+     */
+    public static MemorySegment clang_Cursor_getRawCommentText(SegmentAllocator allocator, MemorySegment x0) {
+        var mh$ = clang_Cursor_getRawCommentText$constants.HANDLE;
+        try {
+            if (TRACE_DOWNCALLS) {
+                traceDowncall("clang_Cursor_getBriefCommentText", allocator, x0);
+            }
+            return (MemorySegment)mh$.invokeExact(allocator, x0);
+        } catch (Throwable ex$) {
+            throw new AssertionError("should not reach here", ex$);
+        }
+    }
+
     private static class clang_getCursorSpelling$constants {
         public static final FunctionDescriptor DESC = FunctionDescriptor.of(
             CXString.layout(),

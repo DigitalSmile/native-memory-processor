@@ -1,6 +1,7 @@
 package io.github.digitalsmile.headers.mapping;
 
 import com.squareup.javapoet.CodeBlock;
+import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
 import org.openjdk.jextract.Type;
 
 import javax.lang.model.type.ArrayType;
@@ -8,7 +9,6 @@ import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import java.lang.foreign.AddressLayout;
 import java.lang.foreign.ValueLayout;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -16,16 +16,18 @@ import static org.openjdk.jextract.Type.Primitive.Kind.*;
 
 public interface OriginalType {
     String typeName();
-    //<T extends TypeMapping> T typeMapping();
+
     Class<?> carrierClass();
+
     ValueLayout valueLayout();
+
     default CodeBlock valueLayoutName() {
         switch (valueLayout()) {
             case ValueLayout.OfBoolean _ -> {
                 return CodeBlock.builder().add("JAVA_BOOLEAN").build();
             }
             case AddressLayout _ -> {
-                return CodeBlock.builder().add("JAVA_ADDRESS").build();
+                return CodeBlock.builder().add("ADDRESS").build();
             }
             case ValueLayout.OfByte _ -> {
                 return CodeBlock.builder().add("JAVA_BYTE").build();
@@ -62,7 +64,7 @@ public interface OriginalType {
             List.of(Float), ValueLayout.JAVA_FLOAT,
             List.of(Double, LongDouble), ValueLayout.JAVA_DOUBLE,
             List.of(Bool), ValueLayout.JAVA_BOOLEAN,
-            List.of(Void), ValueLayout.JAVA_LONG
+            List.of(Void), ValueLayout.ADDRESS
     );
 
 
@@ -85,22 +87,12 @@ public interface OriginalType {
         return C_PRIMITIVE_MAPPING.entrySet().stream().filter(e -> e.getKey().contains(kind)).findFirst().orElseThrow(() -> new RuntimeException("Unsupported primitive kind: " + kind)).getValue();
     }
 
-    List<String> OBJECT_MAPPING = new ArrayList<>();
-
-    static void register(String typeName) {
-        OBJECT_MAPPING.add(typeName);
-    }
-
-    private static String find(String typeName) {
-        return OBJECT_MAPPING.stream().filter(t -> t.equals(typeName)).findFirst().orElseThrow(() -> new RuntimeException("Unsupported object type: " + typeName));
-    }
-
     static OriginalType ofArray(OriginalType originalType, long size) {
         return new ArrayOriginalType(originalType.typeName(), size, originalType.carrierClass());
     }
 
     static OriginalType ofObject(String typeName) {
-        return new ObjectOriginalType(find(typeName));
+        return new ObjectOriginalType(typeName);
     }
 
     static OriginalType of(TypeMirror typeMirror) {
@@ -109,16 +101,16 @@ public interface OriginalType {
             var type = find(kind);
             return new PrimitiveOriginalType(type.carrier().getSimpleName(), type);
         } else if (kind.equals(TypeKind.VOID)) {
-            return new ObjectOriginalType("void");
+            return new ObjectOriginalType(void.class.getSimpleName());
         } else if (kind.equals(TypeKind.ARRAY)) {
             var arrayType = (ArrayType) typeMirror;
             return new ArrayOriginalType(arrayType.toString(), 0, find(arrayType.getComponentType().getKind()));
         }
         var name = typeMirror.toString();
-        if (name.equals("java.lang.String")) {
-            return new ObjectOriginalType("String");
-        } else if (name.equals("io.github.digitalsmile.annotation.structure.NativeMemoryLayout")) {
-            return new ObjectOriginalType("NativeMemoryLayout");
+        if (name.equals(String.class.getCanonicalName())) {
+            return new ObjectOriginalType(String.class.getSimpleName());
+        } else if (name.equals(NativeMemoryLayout.class.getCanonicalName())) {
+            return new ObjectOriginalType(NativeMemoryLayout.class.getSimpleName());
         }
         return ofObject(name);
     }

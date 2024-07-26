@@ -1,7 +1,5 @@
 package io.github.digitalsmile.library;
 
-import io.github.digitalsmile.OsCheck;
-
 import java.io.*;
 import java.nio.file.Files;
 
