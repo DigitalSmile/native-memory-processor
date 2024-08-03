@@ -31,7 +31,10 @@ jobs:
       - name: Get GCC 12 for system header files
         run: |
           sudo apt install gcc-12
-      - name: Get libcurl for tests
+      - name: Install libcurl library for tests
+        run: |
+          sudo apt install libcurl4-openssl-dev
+      - name: Get libcurl source for tests
         run: |
           cd annotation-processor-test/src/test/resources/libcurl && git clone --depth 1 https://github.com/curl/curl.git
       - name: Get libvlc for tests
