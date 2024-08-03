@@ -3,7 +3,7 @@ package io.github.digitalsmile.headers.model;
 public enum NodeType {
     ROOT, OPAQUE,
     STRUCT, ENUM, UNION,
-    ANON_STRUCT, ANON_ENUM, ANON_UNION,
+    ANON_STRUCT, ANON_ENUM, ANON_UNION, POINTER,
     VARIABLE;
 
     public boolean isAnonymous() {
@@ -12,5 +12,17 @@ public enum NodeType {
 
     public boolean isVariable() {
         return this.equals(VARIABLE);
+    }
+
+    public boolean isPointer() {
+        return this.equals(POINTER);
+    }
+
+    public boolean isOpaque() {
+        return this.equals(OPAQUE);
+    }
+
+    public boolean isEnum() {
+        return this.equals(ENUM);
     }
 }

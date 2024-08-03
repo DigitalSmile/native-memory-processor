@@ -2,9 +2,9 @@ package io.github.digitalsmile.headers;
 
 import io.github.digitalsmile.NativeProcessor;
 import io.github.digitalsmile.PackageName;
-import io.github.digitalsmile.headers.model.NodeType;
 import io.github.digitalsmile.headers.mapping.OriginalType;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
+import io.github.digitalsmile.headers.model.NodeType;
 import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.Type;
 
@@ -172,7 +172,12 @@ public class DeclarationParser {
                 if (declaration instanceof Declaration.Constant declarationConstant) {
                     return new NativeMemoryNode(declaration.name(), OriginalType.of(typePrimitive), nextLevel, source, declarationConstant.value());
                 } else {
-                    return new NativeMemoryNode(declaration.name(), OriginalType.of(typePrimitive), nextLevel, source);
+                    if (typePrimitive.kind().equals(Type.Primitive.Kind.Void)) {
+                        PackageName.addPackage(declaration.name(), "opaque");
+                        return new NativeMemoryNode(declaration.name(), NodeType.OPAQUE, OriginalType.ofObject(declaration.name()), nextLevel, source);
+                    } else {
+                        return new NativeMemoryNode(declaration.name(), OriginalType.of(typePrimitive), nextLevel, source);
+                    }
                 }
             }
             case Type.Delegated typeDelegated -> {
@@ -185,14 +190,14 @@ public class DeclarationParser {
                         }
                     }
                     case POINTER, TYPEDEF -> {
+                        var originalType = OriginalType.of(typeDelegated.type());
+                        if (originalType.carrierClass().equals(byte.class)) {
+                            originalType = OriginalType.ofObject(String.class.getSimpleName());
+                        }
                         if (declaration instanceof Declaration.Constant declarationConstant) {
-                            var originalType = OriginalType.of(typeDelegated.type());
-                            if (originalType.carrierClass().equals(byte.class)) {
-                                originalType = OriginalType.ofObject(String.class.getSimpleName());
-                            }
                             return new NativeMemoryNode(declaration.name(), originalType, nextLevel, source, declarationConstant.value());
                         } else {
-                            return new NativeMemoryNode(declaration.name(), OriginalType.of(typeDelegated.type()), nextLevel, source);
+                            return new NativeMemoryNode(declaration.name(), NodeType.POINTER, originalType, nextLevel, source);
                         }
                     }
                     default -> printWarning(declaration, "unsupported variable kind " + typeDelegated.kind());

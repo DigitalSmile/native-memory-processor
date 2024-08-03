@@ -2,7 +2,7 @@ package io.github.digitalsmile.composers;
 
 import com.squareup.javapoet.*;
 import io.github.digitalsmile.PackageName;
-import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
+import io.github.digitalsmile.annotation.types.interfaces.OpaqueMemoryLayout;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
 
 import javax.annotation.processing.Messager;
@@ -21,15 +21,12 @@ public class OpaqueComposer {
 
     public String compose(String prettyName, NativeMemoryNode node) {
         var packageName = PackageName.getPackageName(node.getName());
-        var record = TypeSpec.classBuilder(prettyName)
+        var record = TypeSpec.recordBuilder(prettyName)
                 .addModifiers(Modifier.PUBLIC)
-                .addSuperinterface(TypeName.get(NativeMemoryLayout.class))
-                .addJavadoc("Source: $L\n", node.getPosition())
-                .addJavadoc("Documentation:\n")
+                .addSuperinterface(TypeName.get(OpaqueMemoryLayout.class))
+                .addJavadoc("Source: $L$L", node.getPosition(), node.getPosition().comment().isEmpty() ? "" : "\n\n")
                 .addJavadoc(node.getPosition().comment())
-                .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PRIVATE)
-                        .addParameter(MemorySegment.class, "memorySegment")
-                        .addStatement(CodeBlock.builder().add("this.memorySegment = memorySegment").build())
+                .addField(FieldSpec.builder(MemorySegment.class, "memorySegment")
                         .build())
                 .addField(FieldSpec.builder(TypeName.get(MemoryLayout.class), "LAYOUT", Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
                         .initializer(
@@ -37,7 +34,6 @@ public class OpaqueComposer {
                                         .add("$T.ADDRESS", ValueLayout.class)
                                         .build())
                         .build())
-                .addField(FieldSpec.builder(TypeName.get(MemorySegment.class), "memorySegment", Modifier.PRIVATE).build())
                 .addMethod(MethodSpec.methodBuilder("create")
                         .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                         .addParameter(MemorySegment.class, "memorySegment")
@@ -46,7 +42,7 @@ public class OpaqueComposer {
                 .addMethod(MethodSpec.methodBuilder("createEmpty")
                         .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                         .returns(ClassName.get(packageName, prettyName))
-                        .addStatement("return new $N(null)", prettyName).build())
+                        .addStatement("return new $N($T.NULL)", prettyName, MemorySegment.class).build())
                 .addMethod(MethodSpec.methodBuilder("getMemoryLayout")
                         .addModifiers(Modifier.PUBLIC)
                         .addAnnotation(AnnotationSpec.builder(Override.class).build())
@@ -68,13 +64,13 @@ public class OpaqueComposer {
                         .addParameter(TypeName.get(MemorySegment.class), "buffer")
                         .addException(TypeName.get(Throwable.class))
                         .returns(TypeName.VOID)
-                        .addCode(CodeBlock.builder().addStatement("this.memorySegment = buffer").build())
+                        .addCode(CodeBlock.builder().addStatement("memorySegment().copyFrom(buffer)").build())
                         .build())
                 .addMethod(MethodSpec.methodBuilder("isEmpty")
                         .addModifiers(Modifier.PUBLIC)
                         .addAnnotation(AnnotationSpec.builder(Override.class).build())
                         .returns(TypeName.BOOLEAN.unbox())
-                        .addCode(CodeBlock.builder().addStatement("return memorySegment != null").build())
+                        .addCode(CodeBlock.builder().addStatement("return memorySegment.equals($T.NULL)", MemorySegment.class).build())
                         .build())
                 .build();
         var outputFile = JavaFile.builder(packageName, record)

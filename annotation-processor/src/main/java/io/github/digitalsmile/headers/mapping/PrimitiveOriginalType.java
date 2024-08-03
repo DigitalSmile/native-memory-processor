@@ -43,7 +43,6 @@ public record PrimitiveOriginalType(String typeName, ValueLayout valueLayout) im
     }
 
 
-
     public CodeBlock isEmpty() {
         if (valueLayout.carrier().equals(boolean.class)) {
             return CodeBlock.builder().add(" == false").build();

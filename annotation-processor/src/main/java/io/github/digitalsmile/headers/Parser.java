@@ -2,8 +2,8 @@ package io.github.digitalsmile.headers;
 
 import io.github.digitalsmile.NativeProcessor;
 import io.github.digitalsmile.PackageName;
-import io.github.digitalsmile.headers.model.NodeType;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
+import io.github.digitalsmile.headers.model.NodeType;
 import org.barfuin.texttree.api.TextTree;
 import org.barfuin.texttree.api.TreeOptions;
 import org.barfuin.texttree.api.style.TreeStyles;

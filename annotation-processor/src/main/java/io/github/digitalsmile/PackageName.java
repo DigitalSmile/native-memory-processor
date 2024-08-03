@@ -9,15 +9,15 @@ public class PackageName {
     private static final Map<String, String> packageNamesMap = new HashMap<>();
 
     public static void addPackage(String typeName, String packageName) {
-        packageNamesMap.put(typeName, DEFAULT_PACKAGE_NAME + "." + packageName);
+        packageNamesMap.put(PrettyName.getObjectName(typeName), DEFAULT_PACKAGE_NAME + "." + packageName);
     }
 
     public static void addPackage(String typeName) {
-        packageNamesMap.put(typeName, DEFAULT_PACKAGE_NAME);
+        packageNamesMap.put(PrettyName.getObjectName(typeName), DEFAULT_PACKAGE_NAME);
     }
 
     public static String getPackageName(String typeName) {
-        return packageNamesMap.getOrDefault(typeName, DEFAULT_PACKAGE_NAME);
+        return packageNamesMap.getOrDefault(PrettyName.getObjectName(typeName), DEFAULT_PACKAGE_NAME);
     }
 
     public static void setDefaultPackageName(String packageName) {

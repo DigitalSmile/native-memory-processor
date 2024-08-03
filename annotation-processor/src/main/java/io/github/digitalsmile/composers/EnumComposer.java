@@ -2,14 +2,13 @@ package io.github.digitalsmile.composers;
 
 import com.squareup.javapoet.*;
 import io.github.digitalsmile.PackageName;
-import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
+import io.github.digitalsmile.annotation.types.interfaces.NativeMemoryLayout;
 import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
-import io.github.digitalsmile.headers.model.NativeMemoryNode;
 import io.github.digitalsmile.headers.mapping.PrimitiveOriginalType;
+import io.github.digitalsmile.headers.model.NativeMemoryNode;
 
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.Modifier;
-import javax.tools.Diagnostic;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -30,16 +29,14 @@ public class EnumComposer {
         if (!sameTypes) {
             var classBuilder = TypeSpec.classBuilder(prettyName)
                     .addModifiers(Modifier.PUBLIC)
-                    .addJavadoc("Source: $L\n", node.getPosition())
-                    .addJavadoc("Documentation:\n")
+                    .addJavadoc("Source: $L$L", node.getPosition(), node.getPosition().comment().isEmpty() ? "" : "\n\n")
                     .addJavadoc(node.getPosition().comment());
             for (NativeMemoryNode internalNode : node.nodes()) {
                 if (internalNode.getType() instanceof PrimitiveOriginalType type) {
                     var checkedType = checkValue(type, internalNode.getValue());
                     var fieldSpec = FieldSpec.builder(checkedType.valueLayout().carrier(), internalNode.getName(), Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
                             .initializer("$L$L", internalNode.getValue(), checkedType.literal())
-                            .addJavadoc("Source: $L\n", internalNode.getPosition())
-                            .addJavadoc("Documentation:\n")
+                            .addJavadoc("Source: $L$L", internalNode.getPosition(), internalNode.getPosition().comment().isEmpty() ? "" : "\n\n")
                             .addJavadoc(internalNode.getPosition().comment())
                             .build();
                     classBuilder.addField(fieldSpec);
@@ -47,8 +44,7 @@ public class EnumComposer {
                     if (type.carrierClass().equals(String.class)) {
                         var fieldSpec = FieldSpec.builder(type.carrierClass(), internalNode.getName(), Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
                                 .initializer("$S", internalNode.getValue())
-                                .addJavadoc("Source: $L\n", internalNode.getPosition())
-                                .addJavadoc("Documentation:\n")
+                                .addJavadoc("Source: $L$L", internalNode.getPosition(), internalNode.getPosition().comment().isEmpty() ? "" : "\n\n")
                                 .addJavadoc(internalNode.getPosition().comment())
                                 .build();
                         classBuilder.addField(fieldSpec);
@@ -61,12 +57,16 @@ public class EnumComposer {
             var type = (PrimitiveOriginalType) node.nodes().getFirst().getType();
             var enumBuilder = TypeSpec.enumBuilder(prettyName)
                     .addModifiers(Modifier.PUBLIC)
-                    .addJavadoc("Source: $L\n", node.getPosition())
-                    .addJavadoc("Documentation:\n")
+                    .addJavadoc("Source: $L$L", node.getPosition(), node.getPosition().comment().isEmpty() ? "" : "\n\n")
                     .addJavadoc(node.getPosition().comment())
                     .addSuperinterface(NativeMemoryLayout.class)
                     .addField(FieldSpec.builder(MemoryLayout.class, "LAYOUT", Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
                             .initializer("$T.$L", ValueLayout.class, type.valueLayoutName())
+                            .build())
+                    .addMethod(MethodSpec.methodBuilder("create").addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                            .returns(ClassName.get(packageName, prettyName))
+                            .addParameter(TypeName.get(type.carrierClass()), "value")
+                            .addStatement("return Arrays.stream(values()).filter(p -> p.value == value).findFirst().orElseThrow()")
                             .build())
                     .addMethod(MethodSpec.methodBuilder("createEmpty").addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                             .returns(ClassName.get(packageName, prettyName))
@@ -105,8 +105,7 @@ public class EnumComposer {
             for (NativeMemoryNode internalNode : node.nodes()) {
                 enumBuilder.addEnumConstant(internalNode.getName(),
                         TypeSpec.anonymousClassBuilder("$L", internalNode.getValue())
-                                .addJavadoc("Source: $L\n", internalNode.getPosition())
-                                .addJavadoc("Documentation:\n")
+                                .addJavadoc("Source: $L$L", internalNode.getPosition(), internalNode.getPosition().comment().isEmpty() ? "" : "\n\n")
                                 .addJavadoc(internalNode.getPosition().comment())
                                 .build());
             }
