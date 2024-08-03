@@ -33,7 +33,10 @@ jobs:
           sudo apt install gcc-12
       - name: Get libcurl for tests
         run: |
-          cd annotation-processor-test/src/test/resources/libcurl && git clone https://github.com/curl/curl.git
+          cd annotation-processor-test/src/test/resources/libcurl && git clone --depth 1 https://github.com/curl/curl.git
+      - name: Get libvlc for tests
+        run: |
+          cd annotation-processor-test/src/test/resources/libvlc && git clone --depth 1 https://github.com/videolan/vlc.git
       - name: Getting linux header version for tests
         run: |
           echo "headerVersion=$(uname -r)" >> "$GITHUB_ENV"

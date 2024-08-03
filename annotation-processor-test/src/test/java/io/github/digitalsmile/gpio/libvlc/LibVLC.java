@@ -13,11 +13,10 @@ import io.github.digitalsmile.gpio.libvlc.opaque.LibvlcMediaPlayerT;
 import io.github.digitalsmile.gpio.libvlc.opaque.LibvlcMediaT;
 import io.github.digitalsmile.gpio.libvlc.structs.LibvlcModuleDescriptionT;
 
-@NativeMemory(headers = "/home/ds/vlc/include/vlc/vlc.h")
+@NativeMemory(headers = "libvlc/vlc/include/vlc/vlc.h")
 @NativeMemoryOptions(
-        includes = "/home/ds/vlc/include",
-        systemIncludes = "/usr/lib/llvm-15/lib/clang/15.0.7/include/",
-        debugMode = true)
+        includes = "libvlc/vlc/include",
+        systemIncludes = "/usr/lib/gcc/x86_64-linux-gnu/12/include/")
 @Structs
 @Enums
 @Unions

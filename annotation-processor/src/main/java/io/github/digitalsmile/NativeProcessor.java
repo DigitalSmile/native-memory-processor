@@ -127,7 +127,7 @@ public class NativeProcessor extends AbstractProcessor {
         List<String> systemIncludes = Collections.emptyList();
         if (options != null) {
             rootConstants = options.processRootConstants();
-            includes = Arrays.stream(options.includes()).map(p -> "-I" + p).toList();
+            includes = getHeaderPaths(options.includes()).stream().map(p -> "-I" + p.toFile().getAbsolutePath()).toList();
             systemIncludes = Arrays.stream(options.systemIncludes()).map(p -> "-isystem" + p).toList();
             debug = options.debugMode();
         }
@@ -306,7 +306,7 @@ public class NativeProcessor extends AbstractProcessor {
 
     private FileObject tmpFile;
 
-    private List<Path> getHeaderPaths(String[] headerFiles) {
+    private List<Path> getHeaderPaths(String... headerFiles) {
         List<Path> paths = new ArrayList<>();
         for (String headerFile : headerFiles) {
             var beginVariable = headerFile.indexOf("${");
