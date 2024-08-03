@@ -343,6 +343,11 @@ public class NativeProcessor extends AbstractProcessor {
                     var main = rootPath.resolve("src", "main");
                     var headerFileSplit = headerFile.split(Pattern.quote(File.separator));
                     headerPath = main.resolve("resources", headerFileSplit);
+                    if (!headerPath.toFile().exists()) {
+                        var test = rootPath.resolve("src", "test");
+                        headerFileSplit = headerFile.split(Pattern.quote(File.separator));
+                        headerPath = test.resolve("resources", headerFileSplit);
+                    }
                 }
             }
             paths.add(headerPath);

@@ -28,6 +28,12 @@ jobs:
         with:
           java-version: '22'
           distribution: 'corretto'
+      - name: Get GCC 12 for system header files
+        run: |
+          sudo apt install gcc-12
+      - name: Get libcurl for tests
+        run: |
+          cd annotation-processor-test/src/test/resources/libclang && git clone https://github.com/curl/curl.git
       - name: Getting linux header version for tests
         run: |
           echo "headerVersion=$(uname -r)" >> "$GITHUB_ENV"

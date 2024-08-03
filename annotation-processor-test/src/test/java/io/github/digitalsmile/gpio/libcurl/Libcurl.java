@@ -13,10 +13,10 @@ import io.github.digitalsmile.gpio.libcurl.enums.CURLcode;
 import io.github.digitalsmile.gpio.libcurl.enums.CURLoption;
 import io.github.digitalsmile.gpio.libcurl.opaque.CURL;
 
-@NativeMemory(headers = "/home/ds/curl/include/curl/curl.h")
+@NativeMemory(headers = "libcurl/curl/include/curl/curl.h")
 @NativeMemoryOptions(systemIncludes = {
-        "/usr/lib/llvm-15/lib/clang/15.0.7/include/"
-})
+        "/usr/lib/gcc/x86_64-linux-gnu/12/include/"
+}, debugMode = true)
 @Structs({
         @Struct(name = "CURL", javaName = "CurlInstance")
 })
