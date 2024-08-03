@@ -1,4 +1,4 @@
-package io.github.digitalsmile.annotation.structure;
+package io.github.digitalsmile.annotation.types.interfaces;
 
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
@@ -39,7 +39,7 @@ public interface NativeMemoryLayout {
      * @return new class / object structure from a given buffer
      * @throws Throwable unchecked exception
      */
-    <T> T fromBytes(MemorySegment buffer) throws Throwable;
+    <T extends NativeMemoryLayout & OpaqueMemoryLayout> T fromBytes(MemorySegment buffer) throws Throwable;
 
     /**
      * Converts a class / object structure into a {@link MemorySegment} buffer.

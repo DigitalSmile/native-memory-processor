@@ -12,4 +12,8 @@ module io.github.digitalsmile.annotation {
     exports io.github.digitalsmile.annotation;
     exports io.github.digitalsmile.annotation.function;
     exports io.github.digitalsmile.annotation.structure;
+    exports io.github.digitalsmile.annotation.types;
+    opens io.github.digitalsmile.annotation.types;
+    exports io.github.digitalsmile.annotation.types.interfaces;
+    opens io.github.digitalsmile.annotation.types.interfaces;
 }

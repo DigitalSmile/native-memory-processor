@@ -1,24 +1,24 @@
 package io.github.digitalsmile.composers;
 
 import com.squareup.javapoet.*;
+import io.github.digitalsmile.PackageName;
 import io.github.digitalsmile.PrettyName;
 import io.github.digitalsmile.annotation.function.NativeCall;
-import io.github.digitalsmile.annotation.function.NativeMemoryException;
-import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
+import io.github.digitalsmile.annotation.NativeMemoryException;
+import io.github.digitalsmile.annotation.types.interfaces.OpaqueMemoryLayout;
 import io.github.digitalsmile.functions.FunctionNode;
-import io.github.digitalsmile.functions.Library;
 import io.github.digitalsmile.functions.ParameterNode;
 import io.github.digitalsmile.headers.mapping.ArrayOriginalType;
 import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
+import io.github.digitalsmile.headers.mapping.OriginalType;
 import io.github.digitalsmile.headers.mapping.PrimitiveOriginalType;
 
 import javax.annotation.processing.Messager;
-import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
-import java.lang.foreign.*;
-import java.lang.invoke.MethodHandle;
+import javax.lang.model.element.TypeParameterElement;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,186 +29,180 @@ public class FunctionComposer {
         this.messager = messager;
     }
 
-    public String compose(String packageName, String originalName, String javaName, Map<FunctionNode, ExecutableElement> methodsMap, Map<Library, List<FunctionNode>> libraries) {
-        var classBuilder = TypeSpec.classBuilder(javaName)
+    public String compose(String packageName, String originalName, List<FunctionNode> nodes, Map<FunctionNode, String> nativeFunctionNames) {
+        var context = ClassName.get(packageName, originalName + "Context");
+        var classBuilder = TypeSpec.classBuilder(originalName + "Native")
                 .addModifiers(Modifier.PUBLIC)
                 .addSuperinterface(ClassName.get(packageName, originalName))
-                .superclass(NativeCall.class);
+                .superclass(NativeCall.class)
+                .addMethod(MethodSpec.constructorBuilder()
+                        .addModifiers(Modifier.PUBLIC)
+                        .addStatement("super(new $T())", context)
+                        .build());
 
-        Map<FunctionNode, String> nameMapper = new HashMap<>();
-        for (Library libraryEntry : libraries.keySet()) {
-            var counter = 0;
-            for (FunctionNode node : libraries.get(libraryEntry)) {
-                var contains = nameMapper.containsValue(node.functionName());
-                nameMapper.put(node, !contains ? node.functionName().toUpperCase() + counter++ : node.functionName().toUpperCase());
-            }
+        for (FunctionNode functionNode : nodes) {
+            var returnsCodeBlock = CodeBlock.builder();
+            var options = functionNode.functionOptions();
+            var returnType = functionNode.returnNode().getType();
+            List<CodeBlock> arguments = new ArrayList<>();
+            var methodBody = CodeBlock.builder();
+            for (ParameterNode parameterNode : functionNode.functionParameters()) {
+                var prettyName = PrettyName.getVariableName(parameterNode.name());
+                var node = parameterNode.nativeMemoryNode();
+                var parameterTypeMapping = node.getType();
+                if (parameterNode.byAddress()) {
+                    arguments.add(CodeBlock.builder().add("$LMemorySegment", prettyName).build());
 
-            if (libraryEntry.libraryName().equals("libc")) {
-                continue;
-            }
-            var initializer = CodeBlock.builder();
-            if (libraryEntry.isAlreadyLoaded()) {
-                initializer.add("$T.loaderLookup()", SymbolLookup.class);
-            } else if (libraryEntry.libraryName().startsWith("/")) {
-                initializer.add("$T.libraryLookup(Path.of($S), Arena.global())", SymbolLookup.class, libraryEntry.libraryName());
-            } else {
-                initializer.add("$T.libraryLookup($S, Arena.global())", SymbolLookup.class, libraryEntry.libraryName());
-            }
-            classBuilder.addField(FieldSpec.builder(SymbolLookup.class,
-                            libraryEntry.libraryName().toUpperCase() + "_LIB",
-                            Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-                    .initializer(initializer.build())
-                    .build());
-        }
-        for (List<FunctionNode> nodes : libraries.values()) {
-            for (FunctionNode functionNode : nodes) {
-                var returnsCodeBlock = CodeBlock.builder();
-                List<CodeBlock> parameters = new ArrayList<>();
-                var nativeReturnTypeMapping = functionNode.nativeReturnType();
-                if (!nativeReturnTypeMapping.carrierClass().equals(void.class)) {
-                    switch (nativeReturnTypeMapping) {
-                        case PrimitiveOriginalType primitiveTypeMapping ->
-                                parameters.add(CodeBlock.builder().add("$T.$L", ValueLayout.class, primitiveTypeMapping.valueLayoutName()).build());
-                        case ObjectOriginalType _, ArrayOriginalType _ ->
-                                parameters.add(CodeBlock.builder().add("$T.ADDRESS", ValueLayout.class).build());
-                        default -> throw new IllegalStateException("Unexpected value: " + nativeReturnTypeMapping);
-                    }
-                }
-                List<CodeBlock> arguments = new ArrayList<>();
-                var methodBody = CodeBlock.builder();
-                for (ParameterNode parameterNode : functionNode.functionParameters()) {
-                    var prettyName = PrettyName.getVariableName(parameterNode.name());
-                    var parameterTypeMapping = parameterNode.typeMapping();
-                    if (parameterNode.byAddress()) {
-                        parameters.add(CodeBlock.builder().add("$T.ADDRESS", ValueLayout.class).build());
-                        arguments.add(CodeBlock.builder().add("$LMemorySegment", prettyName).build());
-
-                        switch (parameterNode.typeMapping()) {
-                            case ArrayOriginalType _ -> {
-                                methodBody.addStatement("var $LMemorySegment = offHeap.allocateFrom($T.$L, $L)", prettyName,
+                    switch (parameterTypeMapping) {
+                        case ArrayOriginalType _ -> {
+                            if (parameterTypeMapping.carrierClass().equals(String.class)) {
+                                methodBody.addStatement("var $LMemorySegment = context.allocateFrom($T.JAVA_BYTE, $L)", prettyName,
+                                        ValueLayout.class, prettyName);
+                            } else {
+                                methodBody.addStatement("var $LMemorySegment = context.allocateFrom($T.$L, $L)", prettyName,
                                         ValueLayout.class, parameterTypeMapping.valueLayoutName(), prettyName);
                             }
-                            case ObjectOriginalType _ -> {
-                                if (parameterTypeMapping.carrierClass().equals(String.class)) {
-                                    methodBody.addStatement("var $LMemorySegment = offHeap.allocateFrom($L)", prettyName, prettyName);
-                                } else {
-                                    methodBody.addStatement("var $LMemorySegment = offHeap.allocate($L.getMemoryLayout())", prettyName, prettyName);
-                                    methodBody.addStatement("$L.toBytes($LMemorySegment)", prettyName, prettyName);
-                                }
-                            }
-                            case PrimitiveOriginalType _ -> {
-                                methodBody.addStatement("var $LMemorySegment = offHeap.allocate($T.$L)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName());
-                                methodBody.addStatement("$LMemorySegment.set($T.$L, 0, $L)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName(), prettyName);
-                            }
-                            default ->
-                                    throw new IllegalStateException("Unexpected value: " + parameterNode.typeMapping());
                         }
-                    } else {
-                        parameters.add(CodeBlock.builder().add("$T.$L", ValueLayout.class, parameterTypeMapping.valueLayoutName()).build());
-                        if (parameterTypeMapping instanceof ObjectOriginalType) {
-                            arguments.add(CodeBlock.builder().add("$LMemorySegment", prettyName).build());
-                        } else {
-                            arguments.add(CodeBlock.builder().add("$L", prettyName).build());
+                        case ObjectOriginalType _ -> {
+                            if (parameterTypeMapping.carrierClass().equals(String.class)) {
+                                methodBody.addStatement("var $LMemorySegment = context.allocateFrom($L)", prettyName, prettyName);
+                            } else if (node.getNodeType().isOpaque()) {
+                                methodBody.addStatement("context.checkIsCreatedByArena($L.memorySegment())", prettyName);
+                                methodBody.addStatement("var $LMemorySegment = $L.memorySegment()", prettyName, prettyName);
+                            } else if (parameterTypeMapping.carrierClass().equals(OpaqueMemoryLayout.class)) {
+                                methodBody.addStatement("var $LMemorySegment = $L.getMemorySegment()", prettyName, prettyName);
+                            } else {
+                                methodBody.addStatement("var $LMemorySegment = context.allocate($L.getMemoryLayout())", prettyName, prettyName);
+                                methodBody.addStatement("$L.toBytes($LMemorySegment)", prettyName, prettyName);
+                            }
                         }
+                        case PrimitiveOriginalType _ -> {
+                            methodBody.addStatement("var $LMemorySegment = context.allocate($T.$L)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName());
+                            methodBody.addStatement("$LMemorySegment.set($T.$L, 0, $L)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName(), prettyName);
+                        }
+                        default -> throw new IllegalStateException("Unexpected value: " + parameterTypeMapping);
                     }
-
-                    if (parameterNode.returns()) {
-                        switch (parameterNode.typeMapping()) {
-                            case ArrayOriginalType _ -> {
-                                returnsCodeBlock.addStatement("return $LMemorySegment.toArray($T.$L)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName());
-                            }
-                            case ObjectOriginalType _ -> {
-                                if (parameterTypeMapping.carrierClass().equals(String.class)) {
-                                    returnsCodeBlock.addStatement("return $LMemorySegment.getString(0)", prettyName);
-                                } else if (parameterTypeMapping.carrierClass().equals(NativeMemoryLayout.class)) {
-                                    returnsCodeBlock.addStatement("return $L.fromBytes($LMemorySegment)", prettyName, prettyName);
-                                } else {
-                                    returnsCodeBlock.addStatement("return $L.createEmpty().fromBytes($LMemorySegment)", PrettyName.getObjectName(functionNode.returnType().typeName()), prettyName);
-                                }
-                            }
-                            case PrimitiveOriginalType _ -> {
-                                returnsCodeBlock.addStatement("return $LMemorySegment.get($T.$L, 0)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName());
-                            }
-                            default ->
-                                    throw new IllegalStateException("Unexpected value: " + parameterNode.typeMapping());
-                        }
+                } else if (node.getNodeType().isEnum()) {
+                    arguments.add(CodeBlock.builder().add("$LValue", prettyName).build());
+                    methodBody.addStatement("var $LValue = $L.getValue()", prettyName, prettyName);
+                } else {
+                    if (parameterTypeMapping instanceof ObjectOriginalType) {
+                        arguments.add(CodeBlock.builder().add("$LMemorySegment", prettyName).build());
+                    } else {
+                        arguments.add(CodeBlock.builder().add("$L", prettyName).build());
                     }
                 }
 
-                if (!nativeReturnTypeMapping.carrierClass().equals(void.class) && functionNode.functionParameters().stream().noneMatch(ParameterNode::returns)) {
+                if (parameterNode.returns()) {
+                    switch (parameterTypeMapping) {
+                        case ArrayOriginalType _ -> {
+                            returnsCodeBlock.addStatement("return $LMemorySegment.toArray($T.$L)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName());
+                        }
+                        case ObjectOriginalType _ -> {
+                            if (parameterTypeMapping.carrierClass().equals(String.class)) {
+                                returnsCodeBlock.addStatement("return $LMemorySegment.equals($T.NULL) ? \"\" : $LMemorySegment.reinterpret($T.MAX_VALUE).getString(0)", prettyName, MemorySegment.class, Integer.class);
+                            } else if (parameterTypeMapping.carrierClass().equals(Object.class)) {
+                                returnsCodeBlock.addStatement("return $L.fromBytes($LMemorySegment)", prettyName, prettyName);
+                            } else {
+                                returnsCodeBlock.addStatement("return $L.createEmpty().fromBytes($LMemorySegment)", PrettyName.getObjectName(returnType.typeName()), prettyName);
+                            }
+                        }
+                        case PrimitiveOriginalType _ -> {
+                            returnsCodeBlock.addStatement("return $LMemorySegment.get($T.$L, 0)", prettyName, ValueLayout.class, parameterTypeMapping.valueLayoutName());
+                        }
+                        default -> throw new IllegalStateException("Unexpected value: " + parameterTypeMapping);
+                    }
+                }
+            }
+
+            if (options.useErrno()) {
+                methodBody.addStatement("var capturedState = context.allocate(CAPTURED_STATE_LAYOUT)");
+                methodBody.addStatement("var callResult = (int) $T.$L.invoke($L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                methodBody.addStatement("processError(callResult, capturedState, $S, $L)", functionNode.functionName(), CodeBlock.join(arguments, ", "));
+            } else {
+                if (returnType.carrierClass().equals(void.class)) {
+                    methodBody.addStatement("$T.$L.invoke($L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                } else {
+                    switch (returnType) {
+                        case ArrayOriginalType _, ObjectOriginalType _ ->
+                                methodBody.addStatement("var callResult = ($T) $T.$L.invoke($L)",
+                                        functionNode.returnNode().getNodeType().isEnum() ? int.class : MemorySegment.class,
+                                        context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                        default -> methodBody.addStatement("var callResult = ($T) $T.$L.invoke($L)",
+                                returnType.carrierClass(),
+                                context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                    }
+                }
+            }
+
+            if (!returnType.carrierClass().equals(void.class) && functionNode.functionParameters().stream().noneMatch(ParameterNode::returns)) {
+                if (returnType instanceof ObjectOriginalType) {
+                    if (returnType.carrierClass().equals(String.class)) {
+                        returnsCodeBlock.addStatement("return callResult.equals($T.NULL) ? \"\" : callResult.reinterpret($T.MAX_VALUE).getString(0)", MemorySegment.class, Integer.class);
+                    } else {
+                        var generatedPackageName = PackageName.getPackageName(returnType.typeName());
+                        var prettyName = PrettyName.getObjectName(returnType.typeName());
+                        var c = ClassName.get(generatedPackageName, prettyName);
+                        returnsCodeBlock.addStatement("return $T.create(callResult)", c);
+                    }
+                } else {
                     returnsCodeBlock.addStatement("return callResult");
                 }
-
-                CodeBlock.Builder initializer = CodeBlock.builder().add("$T.nativeLinker().downcallHandle($W", Linker.class);
-                var library = libraries.entrySet().stream().filter(e -> e.getValue().contains(functionNode)).map(Map.Entry::getKey).findFirst().orElseThrow();
-                var libraryName = library.libraryName().equals("libc") ? "STD" : library.libraryName().toUpperCase();
-                initializer.add("$L.find($S).orElseThrow(),$W", libraryName + "_LIB", functionNode.functionName());
-
-                initializer.add("$T.$L($L)$L", FunctionDescriptor.class,
-                        nativeReturnTypeMapping.carrierClass().equals(void.class) ? "ofVoid" : "of",
-                        CodeBlock.join(parameters, ", "), functionNode.useErrno() ? "," : ")");
-
-                if (functionNode.useErrno()) {
-                    initializer.add("$W");
-                    initializer.add("$T.captureCallState($S))", Linker.Option.class, "errno");
-                }
-                if (functionNode.useErrno()) {
-                    methodBody.addStatement("var capturedState = offHeap.allocate(CAPTURED_STATE_LAYOUT)");
-                    if (nativeReturnTypeMapping.carrierClass().equals(void.class)) {
-                        methodBody.addStatement("$L.invoke($L)", nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
-                        methodBody.addStatement("processError(capturedState, $S, $L)", methodsMap.get(functionNode), CodeBlock.join(arguments, ", "));
-                    } else {
-                        switch (functionNode.nativeReturnType()) {
-                            case ArrayOriginalType _, ObjectOriginalType _ ->
-                                    methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
-                                            MemorySegment.class,
-                                            nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
-                            default ->
-                                methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
-                                        nativeReturnTypeMapping.carrierClass(),
-                                        nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
-                        }
-                        methodBody.addStatement("processError(callResult, capturedState, $S, $L)", methodsMap.get(functionNode), CodeBlock.join(arguments, ", "));
-                    }
-                } else {
-                    if (nativeReturnTypeMapping.carrierClass().equals(void.class)) {
-                        methodBody.addStatement("$L.invoke($L)", nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
-                    } else {
-                        switch (functionNode.nativeReturnType()) {
-                            case ArrayOriginalType _, ObjectOriginalType _ ->
-                                    methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
-                                            MemorySegment.class,
-                                            nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
-                            default ->
-                                    methodBody.addStatement("var callResult = ($T) $L.invoke($L)",
-                                            nativeReturnTypeMapping.carrierClass(),
-                                            nameMapper.get(functionNode), CodeBlock.join(arguments, ", "));
-                        }
-                    }
-                }
-
-                var methodSpecBuilder = MethodSpec.overriding(methodsMap.get(functionNode)).addException(NativeMemoryException.class);
-                if (functionNode.useErrno() || functionNode.functionParameters().stream().noneMatch(ParameterNode::returns)) {
-                    methodSpecBuilder.beginControlFlow("try (var offHeap = $T.ofConfined())", Arena.class);
-                } else {
-                    methodSpecBuilder.beginControlFlow("try ");
-                }
-                methodBody.add(returnsCodeBlock.build());
-                methodSpecBuilder.addCode(methodBody.build());
-                methodSpecBuilder.nextControlFlow("catch ($T e)", Throwable.class)
-                        .addStatement("throw new $T(e.getMessage(), e)", NativeMemoryException.class)
-                        .endControlFlow();
-
-
-                classBuilder.addField(FieldSpec.builder(MethodHandle.class, nameMapper.get(functionNode),
-                                        Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-                                .initializer(initializer.build())
-                                .build())
-                        .addMethod(methodSpecBuilder.build());
             }
+
+            var methodSpecBuilder = MethodSpec.methodBuilder(functionNode.functionName())
+                    .addModifiers(Modifier.PUBLIC)
+                    .addAnnotation(AnnotationSpec.builder(Override.class).build())
+                    .returns(createTypeName(returnType))
+                    .addException(NativeMemoryException.class);
+
+            for (TypeParameterElement typeParameterElement : functionNode.typeVariables()) {
+                methodSpecBuilder.addTypeVariable(TypeVariableName.get(typeParameterElement))
+                        .returns(TypeName.get(typeParameterElement.asType()));
+            }
+
+            for (ParameterNode parameterNode : functionNode.functionParameters()) {
+                var typeParameter = methodSpecBuilder.typeVariables.stream().filter(p -> p.name.equals(parameterNode.nativeMemoryNode().getType().typeName())).findFirst().orElse(null);
+                var typeName = typeParameter == null ? createTypeName(parameterNode.nativeMemoryNode().getType()) : typeParameter;
+                methodSpecBuilder.addParameter(ParameterSpec.builder(typeName, parameterNode.name()).build());
+            }
+
+            methodSpecBuilder.beginControlFlow("try");
+            methodBody.add(returnsCodeBlock.build());
+            methodSpecBuilder.addCode(methodBody.build());
+            methodSpecBuilder.nextControlFlow("catch ($T e)", Throwable.class)
+                    .addStatement("throw new $T(e.getMessage(), e)", NativeMemoryException.class)
+                    .endControlFlow();
+            classBuilder.addMethod(methodSpecBuilder.build());
         }
 
-        var outputFile = JavaFile.builder(packageName, classBuilder.build()).indent("\t").skipJavaLangImports(true).build();
+        var builder = JavaFile.builder(packageName, classBuilder.build());
+        var outputFile = builder.indent("\t").skipJavaLangImports(true).build();
         return outputFile.toString();
+    }
+
+    private TypeName createTypeName(OriginalType type) {
+        switch (type) {
+            case ArrayOriginalType arrayOriginalType -> {
+                var parameterPackageName = PackageName.getPackageName(type.typeName());
+                if (arrayOriginalType.isObjectType()) {
+                    return ClassName.get(parameterPackageName, PrettyName.getObjectName(type.typeName()) + "[]");
+                } else {
+                    return TypeName.get(type.carrierClass().arrayType());
+                }
+            }
+            case ObjectOriginalType _ -> {
+                if (type.carrierClass().equals(Object.class)) {
+                    var parameterPackageName = PackageName.getPackageName(type.typeName());
+                    return ClassName.get(parameterPackageName, PrettyName.getObjectName(type.typeName()));
+                } else {
+                    return TypeName.get(type.carrierClass());
+                }
+            }
+            case PrimitiveOriginalType _ -> {
+                return TypeName.get(type.carrierClass());
+            }
+            default -> throw new IllegalStateException("Unexpected value: " + type);
+        }
     }
 }

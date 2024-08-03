@@ -1,4 +1,4 @@
-package io.github.digitalsmile.annotation.function;
+package io.github.digitalsmile.annotation;
 
 /**
  * Exception class to handle IO errors of Native code.

@@ -35,4 +35,5 @@ public @interface NativeMemory {
      * @return the header file path
      */
     String[] headers() default {};
+    String library() default "";
 }

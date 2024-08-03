@@ -1,19 +1,25 @@
 package io.github.digitalsmile.headers.mapping;
 
-import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
-
 import java.lang.foreign.ValueLayout;
 
-public record ObjectOriginalType(String typeName) implements OriginalType {
+public record ObjectOriginalType(String typeName, long alignment) implements OriginalType {
+
+    public ObjectOriginalType(String typeName) {
+        this(typeName, ValueLayout.ADDRESS.byteAlignment());
+    }
 
     @Override
     public Class<?> carrierClass() {
-        return switch (typeName) {
-            case "String" -> String.class;
-            case "void" -> void.class;
-            case "NativeMemoryLayout" -> NativeMemoryLayout.class;
-            default -> Object.class;
-        };
+        try {
+            return switch (typeName()) {
+                case "String" -> String.class;
+                case "void" -> void.class;
+                default -> Class.forName(typeName());
+            };
+        } catch (ClassNotFoundException e) {
+            return Object.class;
+        }
+
     }
 
     @Override

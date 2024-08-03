@@ -5,28 +5,28 @@ import io.avaje.prism.GeneratePrism;
 import io.github.digitalsmile.annotation.NativeMemory;
 import io.github.digitalsmile.annotation.NativeMemoryOptions;
 import io.github.digitalsmile.annotation.function.ByAddress;
-import io.github.digitalsmile.annotation.function.NativeFunction;
-import io.github.digitalsmile.annotation.function.NativeMemoryException;
+import io.github.digitalsmile.annotation.function.NativeManualFunction;
+import io.github.digitalsmile.annotation.NativeMemoryException;
 import io.github.digitalsmile.annotation.function.Returns;
 import io.github.digitalsmile.annotation.structure.Enums;
-import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
+import io.github.digitalsmile.annotation.types.interfaces.NativeMemoryLayout;
 import io.github.digitalsmile.annotation.structure.Structs;
 import io.github.digitalsmile.annotation.structure.Unions;
-import io.github.digitalsmile.composers.EnumComposer;
-import io.github.digitalsmile.composers.FunctionComposer;
-import io.github.digitalsmile.composers.OpaqueComposer;
-import io.github.digitalsmile.composers.StructComposer;
+import io.github.digitalsmile.composers.*;
 import io.github.digitalsmile.functions.FunctionNode;
+import io.github.digitalsmile.functions.FunctionOptions;
 import io.github.digitalsmile.functions.Library;
 import io.github.digitalsmile.functions.ParameterNode;
 import io.github.digitalsmile.headers.Parser;
+import io.github.digitalsmile.headers.mapping.ArrayOriginalType;
 import io.github.digitalsmile.headers.mapping.FunctionOriginalType;
 import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
-import io.github.digitalsmile.headers.mapping.ObjectTypeMirror;
 import io.github.digitalsmile.headers.mapping.OriginalType;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
+import io.github.digitalsmile.headers.model.NodeType;
 import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.JextractTool;
+import org.openjdk.jextract.Position;
 import org.openjdk.jextract.clang.Index;
 import org.openjdk.jextract.clang.TypeLayoutError;
 import org.openjdk.jextract.impl.ClangException;
@@ -35,11 +35,8 @@ import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeKind;
+import javax.lang.model.element.*;
+import javax.lang.model.type.DeclaredType;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
@@ -52,7 +49,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-@GeneratePrism(NativeFunction.class)
+@GeneratePrism(NativeManualFunction.class)
 @SupportedSourceVersion(SourceVersion.RELEASE_22)
 public class NativeProcessor extends AbstractProcessor {
 
@@ -78,11 +75,11 @@ public class NativeProcessor extends AbstractProcessor {
                 }
                 PackageName.setDefaultPackageName(packageName);
 
-                processHeaderFiles(rootElement, headerFiles, packageName, nativeOptions);
+                var parsed = processHeaderFiles(rootElement, headerFiles, packageName, nativeOptions);
 
-                List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(NativeFunction.class)).stream()
+                List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(NativeManualFunction.class)).stream()
                         .filter(f -> f.getEnclosingElement().equals(rootElement)).toList();
-                processFunctions(rootElement, functionElements, packageName);
+                processFunctions(rootElement, functionElements, packageName, parsed);
 
             } catch (Throwable e) {
                 printStackTrace(e);
@@ -95,15 +92,15 @@ public class NativeProcessor extends AbstractProcessor {
     public record Type(String name, String javaName) {
     }
 
-    private void processHeaderFiles(Element element, String[] headerFiles, String packageName, NativeMemoryOptions options) {
+    private List<NativeMemoryNode> processHeaderFiles(Element element, String[] headerFiles, String packageName, NativeMemoryOptions options) {
         if (headerFiles.length == 0) {
-            return;
+            return Collections.emptyList();
         }
         List<Path> headerPaths = getHeaderPaths(headerFiles);
         for (Path path : headerPaths) {
             if (!path.toFile().exists()) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, "Cannot find header file '" + path + "'! Please, check file location", element);
-                return;
+                return Collections.emptyList();
             }
         }
 
@@ -146,7 +143,7 @@ public class NativeProcessor extends AbstractProcessor {
                     printStackTrace(e);
                 }
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getCause().getMessage());
-                return;
+                return Collections.emptyList();
             }
         }
         var parser = new Parser(packageName, processingEnv.getMessager(), processingEnv.getFiler());
@@ -162,11 +159,13 @@ public class NativeProcessor extends AbstractProcessor {
                     }
                 }
             }
+            return parsed;
         } catch (Throwable e) {
             if (debug) {
                 printStackTrace(e);
             }
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+            return Collections.emptyList();
         }
     }
 
@@ -205,10 +204,11 @@ public class NativeProcessor extends AbstractProcessor {
         createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
     }
 
-    private void processFunctions(Element rootElement, List<Element> functionElements, String packageName) {
+    private void processFunctions(Element rootElement, List<Element> functionElements, String packageName, List<NativeMemoryNode> parsed) {
         Map<Library, List<FunctionNode>> libraries = new HashMap<>();
         Map<String, Boolean> loadedLibraries = new HashMap<>();
-        Map<FunctionNode, ExecutableElement> methodMap = new HashMap<>();
+        var flatten = flatten(parsed);
+        List<FunctionNode> nodes = new ArrayList<>();
         for (Element element : functionElements) {
             if (!(element instanceof ExecutableElement functionElement)) {
                 continue;
@@ -218,7 +218,7 @@ public class NativeProcessor extends AbstractProcessor {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Method '" + functionElement + "' must throw NativeMemoryException!", functionElement);
                 break;
             }
-            var instance = NativeFunctionPrism.getInstanceOn(functionElement);
+            var instance = NativeManualFunctionPrism.getInstanceOn(functionElement);
             if (instance == null) {
                 break;
             }
@@ -228,33 +228,65 @@ public class NativeProcessor extends AbstractProcessor {
                 break;
             }
             List<ParameterNode> parameters = new ArrayList<>();
-
-            var returnType = getBoundsOriginalType(functionElement);
-            if (returnType == null) {
-                return;
+            var returnType = OriginalType.of(processingEnv.getTypeUtils().erasure(functionElement.getReturnType()));
+            var returnNode = flatten.stream().filter(p -> PrettyName.getObjectName(p.getName()).equals(returnType.typeName())).findFirst().orElse(null);
+            if (returnNode == null) {
+                var type = functionElement.getReturnType();
+                var isReturnEnum = false;
+                if (type instanceof DeclaredType declaredType) {
+                    isReturnEnum = declaredType.asElement().getKind().equals(ElementKind.ENUM);
+                }
+                returnNode = new NativeMemoryNode("", isReturnEnum ? NodeType.ENUM : NodeType.STRUCT, returnType, 0, Position.NO_POSITION);
             }
-            var nativeReturnType = OriginalType.of(instance.returnType() != null ? instance.returnType() : new ObjectTypeMirror());
+
             for (VariableElement variableElement : functionElement.getParameters()) {
+                var variableName = variableElement.getSimpleName().toString();
                 var returns = variableElement.getAnnotation(Returns.class);
-                var byAddress = variableElement.getAnnotation(ByAddress.class);
+                var byAddressAnnotation = variableElement.getAnnotation(ByAddress.class);
                 var type = variableElement.asType();
-                var originalType = type.getKind().equals(TypeKind.TYPEVAR) ? returnType : OriginalType.of(type);
-                var parameterNode = new ParameterNode(variableElement.getSimpleName().toString(),
-                        originalType, returns != null, byAddress != null || originalType instanceof ObjectOriginalType);
+                var node = flatten.stream().filter(p -> PrettyName.getObjectName(p.getName()).equals(type.toString()))
+                        .findFirst().orElse(null);
+                if (node == null) {
+                    var isEnum = false;
+                    if (type instanceof DeclaredType declaredType) {
+                        isEnum = declaredType.asElement().getKind().equals(ElementKind.ENUM);
+                    }
+                    node = new NativeMemoryNode(variableName, isEnum ? NodeType.ENUM : NodeType.STRUCT, OriginalType.of(type), 0, Position.NO_POSITION);
+                }
+                var originalType = OriginalType.of(type);
+                var byAddress = (byAddressAnnotation != null || originalType instanceof ObjectOriginalType || originalType instanceof ArrayOriginalType) && !node.getNodeType().isEnum();
+                var parameterNode = new ParameterNode(variableName, node, returns != null, byAddress);
                 parameters.add(parameterNode);
             }
-
-            var functionNode = new FunctionNode(instance.name(), nativeReturnType, returnType, parameters, instance.useErrno());
-            var library = new Library(instance.library(), instance.isAlreadyLoaded());
+            var functionOptions = new FunctionOptions(instance.name(), instance.isAlreadyLoaded(), instance.useErrno());
+            var functionNode = new FunctionNode(functionElement.getSimpleName().toString(), functionOptions, returnNode, parameters, functionElement.getTypeParameters());
+            nodes.add(functionNode);
+            var libraryFileName = instance.library();
+            if (instance.library().startsWith("/")) {
+                libraryFileName = Path.of(instance.library()).toAbsolutePath().toFile().getName().split("\\.")[0];
+            } else {
+                libraryFileName = instance.library().split("\\.")[0];
+            }
+            var library = new Library(instance.library(), libraryFileName, instance.isAlreadyLoaded());
             libraries.computeIfAbsent(library, _ -> new ArrayList<>()).add(functionNode);
-            methodMap.put(functionNode, functionElement);
         }
-        var functionComposer = new FunctionComposer(processingEnv.getMessager());
 
-        var nativeClassJavaName = PrettyName.getObjectName(rootElement.getSimpleName().toString() + "Native");
-        var originalJavaName = PrettyName.getObjectName(rootElement.getSimpleName().toString());
-        var output = functionComposer.compose(packageName, originalJavaName, nativeClassJavaName, methodMap, libraries);
-        createGeneratedFile(packageName, nativeClassJavaName, output);
+        if (!nodes.isEmpty()) {
+            Map<FunctionNode, String> nativeFunctionNames = new HashMap<>();
+            var contextComposer = new ContextComposer(processingEnv.getMessager());
+            var contextName = PrettyName.getObjectName(rootElement.getSimpleName().toString() + "Context");
+            var output = contextComposer.compose(packageName, contextName, libraries, nativeFunctionNames);
+            createGeneratedFile(packageName, contextName, output);
+
+            var functionComposer = new FunctionComposer(processingEnv.getMessager());
+            var originalJavaName = PrettyName.getObjectName(rootElement.getSimpleName().toString());
+            output = functionComposer.compose(packageName, originalJavaName, nodes, nativeFunctionNames);
+            createGeneratedFile(packageName, originalJavaName + "Native", output);
+        }
+    }
+
+    private List<NativeMemoryNode> flatten(List<NativeMemoryNode> nodes) {
+        return nodes.stream().flatMap(i -> Stream.concat(Stream.of(i), flatten(i.nodes()).stream())).toList();
     }
 
     private OriginalType getBoundsOriginalType(ExecutableElement functionElement) {

@@ -1,14 +1,12 @@
 package io.github.digitalsmile.headers.mapping;
 
 import com.squareup.javapoet.CodeBlock;
-import io.github.digitalsmile.annotation.structure.NativeMemoryLayout;
 import org.openjdk.jextract.Type;
 
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
-import java.lang.foreign.AddressLayout;
-import java.lang.foreign.ValueLayout;
+import java.lang.foreign.*;
 import java.util.List;
 import java.util.Map;
 
@@ -76,7 +74,8 @@ public interface OriginalType {
             TypeKind.FLOAT, ValueLayout.JAVA_FLOAT,
             TypeKind.INT, ValueLayout.JAVA_INT,
             TypeKind.LONG, ValueLayout.JAVA_LONG,
-            TypeKind.SHORT, ValueLayout.JAVA_SHORT
+            TypeKind.SHORT, ValueLayout.JAVA_SHORT,
+            TypeKind.DECLARED, ValueLayout.ADDRESS
     );
 
     private static ValueLayout find(TypeKind kind) {
@@ -104,14 +103,14 @@ public interface OriginalType {
             return new ObjectOriginalType(void.class.getSimpleName());
         } else if (kind.equals(TypeKind.ARRAY)) {
             var arrayType = (ArrayType) typeMirror;
-            return new ArrayOriginalType(arrayType.toString(), 0, find(arrayType.getComponentType().getKind()));
+            var componentType = arrayType.getComponentType();
+            if (componentType.getKind().equals(TypeKind.DECLARED)) {
+                return new ArrayOriginalType(arrayType.toString(), 0, of(componentType).carrierClass());
+            }  else {
+                return new ArrayOriginalType(arrayType.toString(), 0, find(componentType.getKind()));
+            }
         }
         var name = typeMirror.toString();
-        if (name.equals(String.class.getCanonicalName())) {
-            return new ObjectOriginalType(String.class.getSimpleName());
-        } else if (name.equals(NativeMemoryLayout.class.getCanonicalName())) {
-            return new ObjectOriginalType(NativeMemoryLayout.class.getSimpleName());
-        }
         return ofObject(name);
     }
 

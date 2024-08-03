@@ -1,20 +1,10 @@
 package io.github.digitalsmile.functions;
 
-import io.github.digitalsmile.headers.mapping.OriginalType;
+import io.github.digitalsmile.headers.model.NativeMemoryNode;
 
+import javax.lang.model.element.TypeParameterElement;
 import java.util.List;
 
-public record FunctionNode(String functionName, OriginalType nativeReturnType, OriginalType returnType,
-                           List<ParameterNode> functionParameters, boolean useErrno) {
-
-    @Override
-    public String toString() {
-        return "FunctionNode{" +
-                "functionName='" + functionName + '\'' +
-                ", nativeReturnType=" + nativeReturnType +
-                ", returnType=" + returnType +
-                ", functionParameters=" + functionParameters +
-                ", useErrno=" + useErrno +
-                '}';
-    }
+public record FunctionNode(String functionName, FunctionOptions functionOptions, NativeMemoryNode returnNode,
+                           List<ParameterNode> functionParameters, List<? extends TypeParameterElement> typeVariables) {
 }
