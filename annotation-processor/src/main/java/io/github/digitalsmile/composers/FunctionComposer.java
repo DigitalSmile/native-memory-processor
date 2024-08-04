@@ -117,7 +117,7 @@ public class FunctionComposer {
 
             if (options.useErrno()) {
                 methodBody.addStatement("var capturedState = context.allocate(CAPTURED_STATE_LAYOUT)");
-                methodBody.addStatement("var callResult = (int) $T.$L.invoke($L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                methodBody.addStatement("var callResult = (int) $T.$L.invoke(capturedState, $L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
                 methodBody.addStatement("processError(callResult, capturedState, $S, $L)", functionNode.functionName(), CodeBlock.join(arguments, ", "));
             } else {
                 if (returnType.carrierClass().equals(void.class)) {
