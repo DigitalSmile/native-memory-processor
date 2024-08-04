@@ -10,9 +10,20 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Helper record, that implements array of strings.
+ *
+ * @param strings string array to be created
+ */
 public record StringArray(String... strings) implements NativeMemoryLayout {
+    //Note the max number of strings is 1024
     public static final MemoryLayout LAYOUT = MemoryLayout.sequenceLayout(1024, ValueLayout.ADDRESS);
 
+    /**
+     * Creates empty String array.
+     *
+     * @return empty string array
+     */
     public static StringArray createEmpty() {
         return new StringArray();
     }
@@ -26,7 +37,7 @@ public record StringArray(String... strings) implements NativeMemoryLayout {
     @Override
     public StringArray fromBytes(MemorySegment buffer) throws Throwable {
         List<String> stringList = new ArrayList<>();
-        for (int i = 0; i < buffer.byteSize() / 8; i++) {
+        for (int i = 0; i < buffer.byteSize() / ValueLayout.ADDRESS.byteSize(); i++) {
             var tmp = buffer.getAtIndex(ValueLayout.ADDRESS, i);
             if (tmp.equals(MemorySegment.NULL)) {
                 continue;
@@ -39,6 +50,7 @@ public record StringArray(String... strings) implements NativeMemoryLayout {
     @Override
     public void toBytes(MemorySegment buffer) throws Throwable {
         for (int i = 0; i < strings.length; i++) {
+            //NOTE: all strings are allocated in global arena, since there is no known context in runtime
             var buff = Arena.global().allocateFrom(strings[i]);
             buffer.setAtIndex(ValueLayout.ADDRESS, i, buff);
         }

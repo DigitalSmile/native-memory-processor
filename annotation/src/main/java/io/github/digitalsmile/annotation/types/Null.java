@@ -4,6 +4,9 @@ import io.github.digitalsmile.annotation.types.interfaces.OpaqueMemoryLayout;
 
 import java.lang.foreign.MemorySegment;
 
+/**
+ * Static helper for NULL structure, which is always a pointer of type (void *0)
+ */
 public record Null() implements OpaqueMemoryLayout {
 
     @Override
@@ -20,7 +23,7 @@ public record Null() implements OpaqueMemoryLayout {
 
     @Override
     public void toBytes(MemorySegment buffer) throws Throwable {
-        // do nothing
+        // do nothing since this is NULL
     }
 
     @Override

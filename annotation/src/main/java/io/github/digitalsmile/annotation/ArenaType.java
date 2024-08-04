@@ -1,10 +1,31 @@
 package io.github.digitalsmile.annotation;
 
-import java.lang.foreign.Arena;
-
+/**
+ * Class represents <code>Arena</code> type in string representation for code generation.
+ */
 public enum ArenaType {
-    GLOBAL, AUTO, CONFINED, SHARED;
+    /**
+     * Arena.global()
+     */
+    GLOBAL,
+    /**
+     * Arena.ofAuto()
+     */
+    AUTO,
+    /**
+     * Arena.ofConfined()
+     */
+    CONFINED,
+    /**
+     * Arena.ofShared()
+     */
+    SHARED;
 
+    /**
+     * Gets the string representation of arena type.
+     *
+     * @return string representation of arena type
+     */
     public String arena() {
         return switch (this) {
             case AUTO -> "ofAuto()";

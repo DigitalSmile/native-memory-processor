@@ -40,5 +40,4 @@ public interface Libcurl {
 
     @NativeManualFunction(name = "curl_easy_perform", library = "/usr/lib/x86_64-linux-gnu/libcurl.so")
     CURLcode easyPerform(CURL curl) throws NativeMemoryException;
-
 }

@@ -12,7 +12,8 @@ import java.util.List;
 
 /**
  * Abstract helper class to be used with generated native functions class.
- * It has static references to standard <code>LibC</code> lookup object and <code>errno/strerror</code> handles.
+ * It has a references to context object with library, arena and methods.
+ * Class provides standard <code>errno/strerror</code> handles.
  * <p>
  * Can be used for processing errors from native calls.
  */
@@ -31,23 +32,47 @@ public abstract class NativeCall implements AutoCloseable {
             Linker.nativeLinker().defaultLookup().find("strerror").orElseThrow(),
             FunctionDescriptor.of(POINTER, ValueLayout.JAVA_INT));
 
-
+    // Available scopes
     private final static List<MemorySegment.Scope> scopes = new ArrayList<>();
 
-    protected NativeCall(NativeMemoryContext arena) {
-        this.context = arena;
-        registerScope(arena.getArena().scope());
+    /**
+     * Creates a native call instance with specified context.
+     *
+     * @param context context for constructing native class
+     */
+    protected NativeCall(NativeMemoryContext context) {
+        this.context = context;
+        registerScope(context.getArena().scope());
     }
 
+    /**
+     * Gets the <code>Arena</code>, backed by context.
+     *
+     * @return Arena instance
+     */
     public Arena getInternalArena() {
         return context.getArena();
     }
 
-    public static void registerScope(MemorySegment.Scope arena) {
-        scopes.add(arena);
+    /**
+     * Registers scope to be found for checking the allocated memory segments.
+     * Use this method and register your scope if you are using your own <code>Arena</code> instance.
+     *
+     * @param scope scope to be registered
+     */
+    public static void registerScope(MemorySegment.Scope scope) {
+        scopes.add(scope);
     }
-    public static boolean createdInContext(MemorySegment.Scope arena) {
-        return scopes.contains(arena);
+
+    /**
+     * Checks if current scope is registered.
+     * Use this method and check your scope if you are using your own <code>Arena</code> instance.
+     *
+     * @param scope scope to be checked
+     * @return true if the scope is registered
+     */
+    public static boolean createdInContext(MemorySegment.Scope scope) {
+        return scopes.contains(scope);
     }
 
     @Override
@@ -55,7 +80,7 @@ public abstract class NativeCall implements AutoCloseable {
         try {
             this.context.close();
         } catch (UnsupportedOperationException e) {
-           //do nothing
+            //Since we do not know the arena type in runtime, suppress the exception on close
         } catch (Exception e) {
             throw new NativeMemoryException(e.getMessage(), e);
         }

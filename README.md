@@ -4,6 +4,8 @@
 ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.digitalsmile.native/annotation-processor?label=annotation-processor)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/digitalsmile/native-memory-processor/gradle.yml)
 
+#### Create an interop code with ease.
+
 ## Introduction
 
 With the release of JDK 22 the new Foreign Function & Memory API (FFM API) has been introduced from preview phase.
@@ -17,7 +19,8 @@ This project goal is to combine the power of FFM API and Java, like annotation p
 
 ## Features
 - two separate libraries - `annotation` and `annotation-processor` working with code generation during compile time
-- C/C++ types support in top level: struct, union, enum
+- C/C++ types support in top level: struct, union, enum (including anonymous and opaque)
+- context based generation: combine several native libraries within one code base 
 - can load third party native libraries or use already loaded by classloader
 - flexible native-to-java function declarations
 - pass to native functions primitives and objects, by value or just a pointer
@@ -38,9 +41,9 @@ Windows hosts are not yet supported.
 ```groovy
 dependencies {
     // Annotations to use for code generation
-    implementation 'io.github.digitalsmile.native:annotation:{$version}'
+    implementation 'io.github.digitalsmile.native:annotation:${version}'
     // Process annotations and generate code at compile time
-    annotationProcessor 'io.github.digitalsmile.native:annotation-processor:{$version}'
+    annotationProcessor 'io.github.digitalsmile.native:annotation-processor:${version}'
 }
 ```
 
@@ -50,12 +53,13 @@ dependencies {
 @Structs
 @Enums
 public interface GPIO {
-    @NativeFunction(name = "ioctl", useErrno = true, returnType = int.class)
+    @NativeManualFunction(name = "ioctl", useErrno = true)
     int nativeCall(int fd, long command, int data) throws NativeMemoryException;
 }
 ```
 This code snippet will generate all structures and enums within the header file `gpio.h` (located in `resources` folder), as well as `GPIONative` class with call implementation of `ioctl` native function.
-Find more examples in [documentation](USAGE.md) or in my other project https://github.com/digitalsmile/gpio 
+
+Observe concepts in [doucmentation](CONCEPTS.md) or find more examples in [getting started](USAGE.md). You can also look at [tests](annotation-processor-test/src/test/java/io/github/digitalsmile/gpio) or in my other project https://github.com/digitalsmile/gpio 
 
 3) Enjoy! :)
 
@@ -63,5 +67,3 @@ Find more examples in [documentation](USAGE.md) or in my other project https://g
 
 - more support of native C/C++ types and patterns
 - validation of structures parameters and custom validation support
-- adding more context on different header files, especially connected with each other
-
