@@ -12,7 +12,7 @@ repositories {
 
 dependencies {
     implementation 'io.soabase.java-composer:java-composer:1.0'
-    implementation 'io.github.digitalsmile.native:annotation:1.1'
+    implementation 'io.github.digitalsmile.native:annotation:1.1.1'
 
     annotationProcessor 'io.avaje:avaje-prisms:1.28'
     implementation 'io.avaje:avaje-prisms:1.28'
@@ -26,7 +26,7 @@ import com.vanniktech.maven.publish.SonatypeHost
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
-    coordinates("io.github.digitalsmile.native", "annotation-processor", "1.1")
+    coordinates("io.github.digitalsmile.native", "annotation-processor", "1.1.1")
 
     pom {
         name = "Native Memory Annotation processor"
