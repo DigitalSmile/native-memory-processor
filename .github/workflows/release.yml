@@ -1,0 +1,50 @@
+name: Release to Maven Central
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 22
+        uses: actions/setup-java@v4
+        with:
+          java-version: '22'
+          distribution: 'corretto'
+      - name: Get GCC 12 for system header files
+        run: |
+          sudo apt install gcc-12
+      - name: Install libcurl library for tests
+        run: |
+          sudo apt install libcurl4-openssl-dev
+      - name: Get libcurl source for tests
+        run: |
+          cd annotation-processor-test/src/test/resources/libcurl && git clone --depth 1 https://github.com/curl/curl.git
+      - name: Get libvlc for tests
+        run: |
+          cd annotation-processor-test/src/test/resources/libvlc && git clone --depth 1 https://github.com/videolan/vlc.git
+      - name: Getting linux header version for tests
+        run: |
+          echo "headerVersion=$(uname -r)" >> "$GITHUB_ENV"
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+      - name: Build Gradle
+        run: |
+          ./gradlew build -Dversion=$headerVersion
+      - name: Release to Maven
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALUSERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALPASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGINMEMORYKEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGINMEMORYKEYID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGINMEMORYKEYPASSWORD }}
+        run: |
+          ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
