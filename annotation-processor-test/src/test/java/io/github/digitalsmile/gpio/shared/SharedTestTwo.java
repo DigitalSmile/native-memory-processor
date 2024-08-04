@@ -12,7 +12,7 @@ import io.github.digitalsmile.gpio.shared.structs.Stat;
 @NativeMemory(headers = "/usr/include/x86_64-linux-gnu/sys/stat.h")
 @NativeMemoryOptions(systemHeader = true)
 @Structs(
-        @Struct(name = "stat")
+        @Struct(name = "stat", javaName = "Stat")
 )
 public interface SharedTestTwo {
 
