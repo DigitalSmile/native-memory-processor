@@ -9,8 +9,8 @@ repositories {
 }
 
 dependencies {
-    testImplementation 'io.github.digitalsmile.native:annotation:1.1.1'
-    testAnnotationProcessor 'io.github.digitalsmile.native:annotation-processor:1.1.1'
+    testImplementation 'io.github.digitalsmile.native:annotation:1.1.2'
+    testAnnotationProcessor 'io.github.digitalsmile.native:annotation-processor:1.1.2'
 
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
