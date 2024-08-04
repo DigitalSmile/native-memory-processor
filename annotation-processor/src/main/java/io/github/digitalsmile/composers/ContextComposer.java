@@ -2,6 +2,7 @@ package io.github.digitalsmile.composers;
 
 import com.squareup.javapoet.*;
 import io.github.digitalsmile.PackageName;
+import io.github.digitalsmile.annotation.ArenaType;
 import io.github.digitalsmile.annotation.function.NativeCall;
 import io.github.digitalsmile.annotation.types.interfaces.NativeMemoryContext;
 import io.github.digitalsmile.functions.FunctionNode;
@@ -27,12 +28,12 @@ public class ContextComposer {
         this.messager = messager;
     }
 
-    public String compose(String packageName, String javaName, Map<Library, List<FunctionNode>> libraries, Map<FunctionNode, String> nativeFunctionNames) {
+    public String compose(String packageName, String javaName, Map<Library, List<FunctionNode>> libraries, Map<FunctionNode, String> nativeFunctionNames, ArenaType arenaType) {
         var classBuilder = TypeSpec.classBuilder(javaName)
                 .addSuperinterface(NativeMemoryContext.class);
         classBuilder.addField(FieldSpec.builder(Arena.class, "ARENA")
                 .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-                .initializer("$T.ofAuto()", Arena.class)
+                .initializer("$T.$L", Arena.class, arenaType.arena())
                 .build());
         List<String> nameCache = new ArrayList<>();
         var counter = 0;
@@ -143,6 +144,11 @@ public class ContextComposer {
                         .addAnnotation(AnnotationSpec.builder(Override.class).build())
                         .returns(Arena.class)
                         .addCode(CodeBlock.builder().addStatement("return ARENA").build())
+                        .build())
+                .addMethod(MethodSpec.methodBuilder("close")
+                        .addModifiers(Modifier.PUBLIC)
+                        .addAnnotation(AnnotationSpec.builder(Override.class).build())
+                        .addCode(CodeBlock.builder().addStatement("ARENA.close()").build())
                         .build());
 
         var builder = JavaFile.builder(packageName, classBuilder.build());

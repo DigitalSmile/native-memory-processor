@@ -21,12 +21,16 @@ public class DeclarationParser {
     private final List<NativeProcessor.Type> enums;
     private final Messager messager;
 
+    private final boolean parseSystemHeaders;
+
     private final boolean parseNoStructs;
     private final boolean parseNoEnums;
     private final boolean parseNoUnions;
 
-    public DeclarationParser(Messager messager, List<NativeProcessor.Type> structs, List<NativeProcessor.Type> enums, List<NativeProcessor.Type> unions) {
+    public DeclarationParser(Messager messager, List<NativeProcessor.Type> structs, List<NativeProcessor.Type> enums, List<NativeProcessor.Type> unions,
+                             boolean parseSystemHeaders) {
         this.messager = messager;
+        this.parseSystemHeaders = parseSystemHeaders;
 
         this.parseNoStructs = structs == null;
         this.parseNoEnums = enums == null;
@@ -51,7 +55,7 @@ public class DeclarationParser {
 
     public void parseDeclarations(Declaration.Scoped parent, NativeMemoryNode parentNode, boolean skipSystemHeaders) {
         for (Declaration declaration : parent.members()) {
-            if (skipSystemHeaders && notInScope(declaration)) {
+            if (skipSystemHeaders && notInScope(declaration) && !parseSystemHeaders) {
                 continue;
             }
             parseDeclaration(declaration, parentNode, parent.kind().equals(Declaration.Scoped.Kind.TOPLEVEL));
@@ -166,6 +170,10 @@ public class DeclarationParser {
         var source = declaration.pos();
         switch (type) {
             case Type.Array typeArray -> {
+                if (typeArray.elementType().isErroneous()) {
+                    printWarning(declaration, "type " + type + " is not valid C/C++ constructions and will be skipped.");
+                    return null;
+                }
                 return new NativeMemoryNode(declaration.name(), OriginalType.of(typeArray), nextLevel, source);
             }
             case Type.Primitive typePrimitive -> {

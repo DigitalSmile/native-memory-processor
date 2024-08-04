@@ -1,8 +1,6 @@
-package io.github.digitalsmile.gpio;
+package io.github.digitalsmile.gpio.types.all;
 
-import io.github.digitalsmile.gpio.types.all.*;
 import io.github.digitalsmile.gpio.types.all.structs.*;
-import io.github.digitalsmile.gpio.types.all.enums.*;
 import org.junit.jupiter.api.Test;
 
 import java.lang.foreign.Arena;

@@ -34,12 +34,12 @@ public class Parser {
 
     public List<NativeMemoryNode> parse(List<NativeProcessor.Type> structs, List<NativeProcessor.Type> enums,
                                         List<NativeProcessor.Type> unions,
-                                        Map<Path, Declaration.Scoped> parsed, boolean debug) {
+                                        Map<Path, Declaration.Scoped> parsed, boolean debug, boolean systemHeader) {
 
         List<NativeMemoryNode> nodes = new ArrayList<>();
         for (Map.Entry<Path, Declaration.Scoped> entry : parsed.entrySet()) {
-            var declarationParser = new DeclarationParser(messager, structs, enums, unions);
-            var rootName = entry.getKey().toFile().getName().split("\\.")[0];
+            var rootName = entry.getKey().toFile().getAbsolutePath();//.getName().split("\\.")[0];
+            var declarationParser = new DeclarationParser(messager, structs, enums, unions, systemHeader);
             var root = new NativeMemoryNode(rootName, NodeType.ROOT);
             declarationParser.parseRoot(entry.getValue(), root);
             if (debug) {
@@ -65,13 +65,15 @@ public class Parser {
         while (iterator.hasNext()) {
             var node = iterator.next();
             var nodeType = node.getNodeType();
-            if (node.getLevel() > 1 && !nodeType.isVariable() && !nodeType.equals(NodeType.ANON_UNION) && !node.nodes().isEmpty()) {
+            var type = node.getType();
+            var contains = rootNode.nodes().stream().anyMatch(p -> p.getName().equals(type.typeName()));
+            if (node.getLevel() > 1 && !nodeType.isVariable() && !nodeType.equals(NodeType.ANON_UNION) && !node.nodes().isEmpty() && !contains) {
                 var newNodeType = makeNotAnonymous(nodeType);
                 var newNode = new NativeMemoryNode(node.getName(), newNodeType, node.getType(), 1, node.getPosition(), node.getValue());
                 iterator.set(newNode);
-                var type = node.getType().typeName();
-                PackageName.addPackage(type, "nested");
-                var rebuildNode = new NativeMemoryNode(type, newNodeType, node.getType(), node.getLevel(), node.getPosition(), node.getValue());
+                var typeName = type.typeName();
+                PackageName.addPackage(typeName, "nested");
+                var rebuildNode = new NativeMemoryNode(typeName, newNodeType, node.getType(), node.getLevel(), node.getPosition(), node.getValue());
                 rebuildNode.addNodes(node.nodes());
                 rootNode.addNode(rebuildNode);
             }

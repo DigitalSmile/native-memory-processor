@@ -27,5 +27,5 @@ jar {
 
 test {
     useJUnitPlatform()
-    jvmArgs ['--enable-native-access=ALL_UNNAMED']
+    jvmArgs "--enable-native-access=ALL-UNNAMED"
 }

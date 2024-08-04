@@ -20,10 +20,14 @@ public @interface NativeMemoryOptions {
      */
     boolean processRootConstants() default false;
 
+    ArenaType arena() default ArenaType.AUTO;
+
     String packageName() default "";
 
     String[] includes() default {};
     String[] systemIncludes() default {};
+
+    boolean systemHeader() default false;
 
     boolean debugMode() default false;
 }

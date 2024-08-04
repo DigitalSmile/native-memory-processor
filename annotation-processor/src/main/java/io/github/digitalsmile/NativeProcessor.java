@@ -2,6 +2,7 @@ package io.github.digitalsmile;
 
 
 import io.avaje.prism.GeneratePrism;
+import io.github.digitalsmile.annotation.ArenaType;
 import io.github.digitalsmile.annotation.NativeMemory;
 import io.github.digitalsmile.annotation.NativeMemoryException;
 import io.github.digitalsmile.annotation.NativeMemoryOptions;
@@ -79,7 +80,7 @@ public class NativeProcessor extends AbstractProcessor {
 
                 List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(NativeManualFunction.class)).stream()
                         .filter(f -> f.getEnclosingElement().equals(rootElement)).toList();
-                processFunctions(rootElement, functionElements, packageName, parsed);
+                processFunctions(rootElement, functionElements, packageName, parsed, nativeOptions);
 
             } catch (Throwable e) {
                 printStackTrace(e);
@@ -121,8 +122,9 @@ public class NativeProcessor extends AbstractProcessor {
             unions = Arrays.stream(unionsAnnotation.value()).map(union -> new Type(union.name(), union.javaName())).toList();
         }
 
-        boolean rootConstants = false;
-        boolean debug = false;
+        var rootConstants = false;
+        var debug = false;
+        var systemHeader = false;
         List<String> includes = Collections.emptyList();
         List<String> systemIncludes = Collections.emptyList();
         if (options != null) {
@@ -130,6 +132,7 @@ public class NativeProcessor extends AbstractProcessor {
             includes = getHeaderPaths(options.includes()).stream().map(p -> "-I" + p.toFile().getAbsolutePath()).toList();
             systemIncludes = Arrays.stream(options.systemIncludes()).map(p -> "-isystem" + p).toList();
             debug = options.debugMode();
+            systemHeader = options.systemHeader();
         }
 
         Map<Path, Declaration.Scoped> allParsedHeaders = new HashMap<>();
@@ -142,13 +145,13 @@ public class NativeProcessor extends AbstractProcessor {
                 if (debug) {
                     printStackTrace(e);
                 }
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getCause().getMessage());
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
                 return Collections.emptyList();
             }
         }
         var parser = new Parser(packageName, processingEnv.getMessager(), processingEnv.getFiler());
         try {
-            var parsed = parser.parse(structs, enums, unions, allParsedHeaders, debug);
+            var parsed = parser.parse(structs, enums, unions, allParsedHeaders, debug, systemHeader);
             for (NativeMemoryNode rootNode : parsed) {
                 for (NativeMemoryNode node : rootNode.nodes()) {
                     switch (node.getNodeType()) {
@@ -185,17 +188,19 @@ public class NativeProcessor extends AbstractProcessor {
     }
 
     private void processEnums(NativeMemoryNode node, boolean rootConstants) {
-        if (node.getName().contains("Constants")) {
-            if (!rootConstants) {
-                return;
-            }
-        }
         if (node.nodes().isEmpty()) {
             return;
         }
+        var name = node.getName();
+        if (node.getName().endsWith("_constants")) {
+            if (!rootConstants) {
+                return;
+            }
+            name = name.substring(name.lastIndexOf("/"), name.lastIndexOf(".")) + "_constants";
+        }
         var enumComposer = new EnumComposer(processingEnv.getMessager());
-        var output = enumComposer.compose(PrettyName.getObjectName(node.getName()), node);
-        createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
+        var output = enumComposer.compose(PrettyName.getObjectName(name), node);
+        createGeneratedFile(PackageName.getPackageName(name), PrettyName.getObjectName(name), output);
     }
 
     private void processUnions(NativeMemoryNode node) {
@@ -204,11 +209,15 @@ public class NativeProcessor extends AbstractProcessor {
         createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
     }
 
-    private void processFunctions(Element rootElement, List<Element> functionElements, String packageName, List<NativeMemoryNode> parsed) {
+    private void processFunctions(Element rootElement, List<Element> functionElements, String packageName, List<NativeMemoryNode> parsed, NativeMemoryOptions nativeOptions) {
         Map<Library, List<FunctionNode>> libraries = new HashMap<>();
         Map<String, Boolean> loadedLibraries = new HashMap<>();
         var flatten = flatten(parsed);
         List<FunctionNode> nodes = new ArrayList<>();
+        var arentType = ArenaType.AUTO;
+        if (nativeOptions != null) {
+            arentType = nativeOptions.arena();
+        }
         for (Element element : functionElements) {
             if (!(element instanceof ExecutableElement functionElement)) {
                 continue;
@@ -271,13 +280,14 @@ public class NativeProcessor extends AbstractProcessor {
             libraries.computeIfAbsent(library, _ -> new ArrayList<>()).add(functionNode);
         }
 
-        if (!nodes.isEmpty()) {
-            Map<FunctionNode, String> nativeFunctionNames = new HashMap<>();
-            var contextComposer = new ContextComposer(processingEnv.getMessager());
-            var contextName = PrettyName.getObjectName(rootElement.getSimpleName().toString() + "Context");
-            var output = contextComposer.compose(packageName, contextName, libraries, nativeFunctionNames);
-            createGeneratedFile(packageName, contextName, output);
 
+        Map<FunctionNode, String> nativeFunctionNames = new HashMap<>();
+        var contextComposer = new ContextComposer(processingEnv.getMessager());
+        var contextName = PrettyName.getObjectName(rootElement.getSimpleName().toString() + "Context");
+        var output = contextComposer.compose(packageName, contextName, libraries, nativeFunctionNames, arentType);
+        createGeneratedFile(packageName, contextName, output);
+
+        if (!nodes.isEmpty()) {
             var functionComposer = new FunctionComposer(processingEnv.getMessager());
             var originalJavaName = PrettyName.getObjectName(rootElement.getSimpleName().toString());
             output = functionComposer.compose(packageName, originalJavaName, nodes, nativeFunctionNames);

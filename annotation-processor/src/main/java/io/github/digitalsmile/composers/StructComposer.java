@@ -155,7 +155,8 @@ public class StructComposer {
 
     private List<CodeBlock> processMemoryLayout(List<NativeMemoryNode> nodes, NativeMemoryNode n) {
         List<CodeBlock> memoryLayouts = new ArrayList<>();
-        var maxAlignment = calculateMaxAlignment(nodes);
+        //var maxAlignment = calculateMaxAlignment(nodes);
+        var sumAlignment = 0;
         for (NativeMemoryNode node : nodes) {
             var type = node.getType();
             var comment = node.getPosition().comment();
@@ -199,9 +200,11 @@ public class StructComposer {
                 default -> messager.printMessage(Diagnostic.Kind.ERROR, "unsupported type " + type);
             }
             var byteSize = type instanceof ArrayOriginalType originalType ? originalType.arraySize() * type.valueLayout().byteSize() : type.valueLayout().byteSize();
-            if (byteSize % maxAlignment != 0) {
+            sumAlignment += (int) byteSize;
+            if (sumAlignment % 4 != 0) {
+                var alignSize = (sumAlignment + 4 - 1) / 4 * 4;
                 memoryLayouts.add(CodeBlock.builder().add("$T.paddingLayout($L)", MemoryLayout.class,
-                        maxAlignment - type.valueLayout().byteAlignment()).build());
+                        alignSize - sumAlignment).build());
             }
         }
         return memoryLayouts;

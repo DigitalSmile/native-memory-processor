@@ -16,7 +16,7 @@ import java.util.List;
  * <p>
  * Can be used for processing errors from native calls.
  */
-public abstract class NativeCall {
+public abstract class NativeCall implements AutoCloseable {
     protected final NativeMemoryContext context;
     // Captured state for errno
     protected static final StructLayout CAPTURED_STATE_LAYOUT = Linker.Option.captureStateLayout();
@@ -48,6 +48,17 @@ public abstract class NativeCall {
     }
     public static boolean createdInContext(MemorySegment.Scope arena) {
         return scopes.contains(arena);
+    }
+
+    @Override
+    public void close() throws NativeMemoryException {
+        try {
+            this.context.close();
+        } catch (UnsupportedOperationException e) {
+           //do nothing
+        } catch (Exception e) {
+            throw new NativeMemoryException(e.getMessage(), e);
+        }
     }
 
     /**

@@ -16,7 +16,7 @@ import io.github.digitalsmile.gpio.libcurl.opaque.CURL;
 @NativeMemory(headers = "libcurl/curl/include/curl/curl.h")
 @NativeMemoryOptions(systemIncludes = {
         "/usr/lib/gcc/x86_64-linux-gnu/12/include/"
-}, debugMode = true)
+}, debugMode = true, processRootConstants = true)
 @Structs({
         @Struct(name = "CURL", javaName = "CurlInstance")
 })
