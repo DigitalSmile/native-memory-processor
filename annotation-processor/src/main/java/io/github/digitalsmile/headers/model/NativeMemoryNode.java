@@ -6,6 +6,7 @@ import org.openjdk.jextract.Position;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class NativeMemoryNode implements Node {
     private final String name;

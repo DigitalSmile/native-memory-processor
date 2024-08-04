@@ -15,7 +15,7 @@ public class PrettyName {
     public static String getVariableName(String name) {
         var cachedName = NAMING_CACHE.get(name);
         if (cachedName != null) {
-            return cachedName;
+            name = cachedName;
         }
         name = checkJavaName(name);
         if (name.matches("([a-z]+[a-zA-Z0-9]+)+")) {
@@ -38,7 +38,7 @@ public class PrettyName {
     public static String getObjectName(String name) {
         var cachedName = NAMING_CACHE.get(name);
         if (cachedName != null) {
-            return cachedName;
+            name = cachedName;
         }
         name = checkJavaName(name);
         if (name.matches("([A-Z]+[a-zA-Z0-9]+)+")) {

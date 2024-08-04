@@ -112,14 +112,17 @@ public class NativeProcessor extends AbstractProcessor {
         List<Type> structs = null;
         if (structsAnnotation != null) {
             structs = Arrays.stream(structsAnnotation.value()).map(struct -> new Type(struct.name(), struct.javaName())).toList();
+            Arrays.stream(structsAnnotation.value()).forEach(struct -> PrettyName.addName(struct.name(), struct.javaName()));
         }
         List<Type> enums = null;
         if (enumsAnnotation != null) {
             enums = Arrays.stream(enumsAnnotation.value()).map(enoom -> new Type(enoom.name(), enoom.javaName())).toList();
+            Arrays.stream(enumsAnnotation.value()).forEach(enoom -> PrettyName.addName(enoom.name(), enoom.javaName()));
         }
         List<Type> unions = null;
         if (unionsAnnotation != null) {
             unions = Arrays.stream(unionsAnnotation.value()).map(union -> new Type(union.name(), union.javaName())).toList();
+            Arrays.stream(unionsAnnotation.value()).forEach(union -> PrettyName.addName(union.name(), union.javaName()));
         }
 
         var rootConstants = false;
