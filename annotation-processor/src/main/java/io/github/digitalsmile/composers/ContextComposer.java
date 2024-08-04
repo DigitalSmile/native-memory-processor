@@ -2,6 +2,7 @@ package io.github.digitalsmile.composers;
 
 import com.squareup.javapoet.*;
 import io.github.digitalsmile.PackageName;
+import io.github.digitalsmile.PrettyName;
 import io.github.digitalsmile.annotation.ArenaType;
 import io.github.digitalsmile.annotation.function.NativeCall;
 import io.github.digitalsmile.annotation.types.interfaces.NativeMemoryContext;
@@ -88,7 +89,7 @@ public class ContextComposer {
                         parameters.add(CodeBlock.builder().add("$T.ADDRESS", ValueLayout.class).build());
                     } else if (node.getNodeType().isEnum()) {
                         var parameterPackageName = PackageName.getPackageName(type.typeName());
-                        var typeName = ClassName.get(parameterPackageName, type.typeName());
+                        var typeName = ClassName.get(parameterPackageName, PrettyName.getObjectName(type.typeName()));
                         parameters.add(CodeBlock.builder().add("$T.LAYOUT", typeName).build());
                     } else {
                         parameters.add(CodeBlock.builder().add("$T.$L", ValueLayout.class, type.valueLayoutName()).build());
