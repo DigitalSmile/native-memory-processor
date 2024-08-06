@@ -16,6 +16,7 @@ import io.github.digitalsmile.headers.mapping.PrimitiveOriginalType;
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeParameterElement;
+import javax.tools.Diagnostic;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.util.ArrayList;
@@ -156,9 +157,12 @@ public class FunctionComposer {
                     .returns(createTypeName(returnType))
                     .addException(NativeMemoryException.class);
 
+            var returnTypeName = functionNode.returnNode().getType().typeName();
             for (TypeParameterElement typeParameterElement : functionNode.typeVariables()) {
-                methodSpecBuilder.addTypeVariable(TypeVariableName.get(typeParameterElement))
-                        .returns(TypeName.get(typeParameterElement.asType()));
+                methodSpecBuilder.addTypeVariable(TypeVariableName.get(typeParameterElement));
+                if (returnTypeName.equals(typeParameterElement.asType().toString())) {
+                    methodSpecBuilder.returns(TypeName.get(typeParameterElement.asType()));
+                }
             }
 
             for (ParameterNode parameterNode : functionNode.functionParameters()) {

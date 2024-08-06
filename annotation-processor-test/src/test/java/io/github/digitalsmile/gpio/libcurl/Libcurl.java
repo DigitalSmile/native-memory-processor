@@ -5,6 +5,8 @@ import io.github.digitalsmile.annotation.NativeMemoryException;
 import io.github.digitalsmile.annotation.NativeMemoryOptions;
 import io.github.digitalsmile.annotation.function.ByAddress;
 import io.github.digitalsmile.annotation.function.NativeManualFunction;
+import io.github.digitalsmile.annotation.library.NativeFunction;
+import io.github.digitalsmile.annotation.library.NativeMemoryLibrary;
 import io.github.digitalsmile.annotation.structure.Enum;
 import io.github.digitalsmile.annotation.structure.Enums;
 import io.github.digitalsmile.annotation.structure.Struct;

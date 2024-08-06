@@ -7,7 +7,7 @@ import java.lang.annotation.Target;
 
 /**
  * Root annotation to mark interface with generation intent of FFM API objects.
- * This annotation is essential to start processing, each individual interface should be annotated to work.
+ * This annotation is essential to start header processing, each individual interface should be annotated to make things work.
  * Before using the annotation, please add <code>annotationProcessor</code> library.
  * Simple example usage:
  * <pre>{@code
@@ -29,11 +29,10 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface NativeMemory {
     /**
-     * Sets the header file path to be parsed for structures. Leave empty if only functions declaration are used.
+     * Sets the header file path to be parsed for structures.
      * File path can be absolute or relative to <code>resources</code> folder.
      *
      * @return the header file path
      */
-    String[] headers() default {};
-    String library() default "";
+    String[] headers();
 }

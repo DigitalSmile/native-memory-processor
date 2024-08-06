@@ -16,4 +16,6 @@ module io.github.digitalsmile.annotation {
     opens io.github.digitalsmile.annotation.types;
     exports io.github.digitalsmile.annotation.types.interfaces;
     opens io.github.digitalsmile.annotation.types.interfaces;
+    exports io.github.digitalsmile.annotation.library;
+    opens io.github.digitalsmile.annotation.library;
 }

@@ -1,6 +1,5 @@
 package io.github.digitalsmile.headers;
 
-import io.github.digitalsmile.NativeProcessor;
 import io.github.digitalsmile.PackageName;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
 import io.github.digitalsmile.headers.model.NodeType;
@@ -32,8 +31,8 @@ public class Parser {
         this.filer = filer;
     }
 
-    public List<NativeMemoryNode> parse(List<NativeProcessor.Type> structs, List<NativeProcessor.Type> enums,
-                                        List<NativeProcessor.Type> unions,
+    public List<NativeMemoryNode> parse(List<String> structs, List<String> enums,
+                                        List<String> unions,
                                         Map<Path, Declaration.Scoped> parsed, boolean debug, boolean systemHeader) {
 
         List<NativeMemoryNode> nodes = new ArrayList<>();

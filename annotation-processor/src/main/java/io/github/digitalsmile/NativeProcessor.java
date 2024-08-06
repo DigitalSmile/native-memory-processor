@@ -4,14 +4,13 @@ package io.github.digitalsmile;
 import io.avaje.prism.GeneratePrism;
 import io.github.digitalsmile.annotation.ArenaType;
 import io.github.digitalsmile.annotation.NativeMemory;
-import io.github.digitalsmile.annotation.NativeMemoryException;
 import io.github.digitalsmile.annotation.NativeMemoryOptions;
 import io.github.digitalsmile.annotation.function.ByAddress;
 import io.github.digitalsmile.annotation.function.NativeManualFunction;
 import io.github.digitalsmile.annotation.function.Returns;
-import io.github.digitalsmile.annotation.structure.Enums;
-import io.github.digitalsmile.annotation.structure.Structs;
-import io.github.digitalsmile.annotation.structure.Unions;
+import io.github.digitalsmile.annotation.library.NativeMemoryLibrary;
+import io.github.digitalsmile.annotation.structure.*;
+import io.github.digitalsmile.annotation.structure.Enum;
 import io.github.digitalsmile.annotation.types.interfaces.NativeMemoryLayout;
 import io.github.digitalsmile.composers.*;
 import io.github.digitalsmile.functions.FunctionNode;
@@ -25,6 +24,8 @@ import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
 import io.github.digitalsmile.headers.mapping.OriginalType;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
 import io.github.digitalsmile.headers.model.NodeType;
+import io.github.digitalsmile.validation.NativeProcessorValidator;
+import io.github.digitalsmile.validation.ValidationException;
 import org.openjdk.jextract.Declaration;
 import org.openjdk.jextract.JextractTool;
 import org.openjdk.jextract.Position;
@@ -50,13 +51,18 @@ import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import static java.util.Collections.emptyList;
+
 @GeneratePrism(NativeManualFunction.class)
 @SupportedSourceVersion(SourceVersion.RELEASE_22)
 public class NativeProcessor extends AbstractProcessor {
 
+    private NativeProcessorValidator validator;
+
+
     @Override
     public Set<String> getSupportedAnnotationTypes() {
-        return Set.of(NativeMemory.class.getName());
+        return Set.of(NativeMemory.class.getName(), NativeMemoryLibrary.class.getName(), NativeManualFunction.class.getName());
     }
 
 
@@ -65,43 +71,64 @@ public class NativeProcessor extends AbstractProcessor {
         if (roundEnv.processingOver()) {
             return true;
         }
-        for (Element rootElement : roundEnv.getElementsAnnotatedWith(NativeMemory.class)) {
+        this.validator = new NativeProcessorValidator(processingEnv.getMessager(), processingEnv.getElementUtils(), processingEnv.getTypeUtils());
+
+        for (Element rootElement : roundEnv.getRootElements()) {
+            if (!rootElement.getKind().isInterface()) {
+                continue;
+            }
+            var nativeMemory = rootElement.getAnnotation(NativeMemory.class);
+            var manualFunctionElements = rootElement.getEnclosedElements().stream().filter(p -> p.getAnnotation(NativeManualFunction.class) != null).toList();
+            var automaticFunctionElements = rootElement.getAnnotation(NativeMemoryLibrary.class);
+            if (nativeMemory == null && manualFunctionElements.isEmpty() && automaticFunctionElements == null) {
+                continue;
+            }
+
             try {
-                var nativeAnnotation = rootElement.getAnnotation(NativeMemory.class);
-                var nativeOptions = rootElement.getAnnotation(NativeMemoryOptions.class);
-                var headerFiles = nativeAnnotation.headers();
+                var parsed = Collections.<NativeMemoryNode>emptyList();
                 var packageName = processingEnv.getElementUtils().getPackageOf(rootElement).getQualifiedName().toString();
+                var nativeOptions = rootElement.getAnnotation(NativeMemoryOptions.class);
                 if (nativeOptions != null && !nativeOptions.packageName().isEmpty()) {
-                    packageName = nativeOptions.packageName();
+                    packageName = validator.validatePackageName(nativeOptions.packageName());
                 }
                 PackageName.setDefaultPackageName(packageName);
 
-                var parsed = processHeaderFiles(rootElement, headerFiles, packageName, nativeOptions);
 
-                List<Element> functionElements = new ArrayList<Element>(roundEnv.getElementsAnnotatedWith(NativeManualFunction.class)).stream()
-                        .filter(f -> f.getEnclosingElement().equals(rootElement)).toList();
-                processFunctions(rootElement, functionElements, packageName, parsed, nativeOptions);
+                if (nativeMemory != null) {
+                    var headerFiles = nativeMemory.headers();
+                    parsed = processHeaderFiles(rootElement, headerFiles, packageName, nativeOptions);
+                }
 
+                List<Element> manualFunctions = new ArrayList<>();
+                for (Element manualFunction : manualFunctionElements) {
+                    validator.validateManualFunction(manualFunction);
+                    manualFunctions.add(manualFunction);
+                }
+
+                if (automaticFunctionElements != null) {
+                    validator.validateAutomaticFunctions(parsed, automaticFunctionElements);
+                }
+
+                processFunctions(rootElement, manualFunctions, packageName, parsed, nativeOptions);
+            } catch (ValidationException e) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage(), e.getElement());
             } catch (Throwable e) {
                 printStackTrace(e);
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage(), rootElement);
             }
         }
         return true;
     }
 
-    public record Type(String name, String javaName) {
-    }
-
-    private List<NativeMemoryNode> processHeaderFiles(Element element, String[] headerFiles, String packageName, NativeMemoryOptions options) {
+    private List<NativeMemoryNode> processHeaderFiles(Element element, String[] headerFiles, String packageName, NativeMemoryOptions options) throws ValidationException {
         if (headerFiles.length == 0) {
-            return Collections.emptyList();
+            return emptyList();
         }
         List<Path> headerPaths = getHeaderPaths(headerFiles);
         for (Path path : headerPaths) {
             if (!path.toFile().exists()) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, "Cannot find header file '" + path + "'! Please, check file location", element);
-                return Collections.emptyList();
+                return emptyList();
             }
         }
 
@@ -109,31 +136,40 @@ public class NativeProcessor extends AbstractProcessor {
         var unionsAnnotation = element.getAnnotation(Unions.class);
         var enumsAnnotation = element.getAnnotation(Enums.class);
 
-        List<Type> structs = null;
+        List<String> structs = null;
         if (structsAnnotation != null) {
-            structs = Arrays.stream(structsAnnotation.value()).map(struct -> new Type(struct.name(), struct.javaName())).toList();
-            Arrays.stream(structsAnnotation.value()).forEach(struct -> PrettyName.addName(struct.name(), struct.javaName()));
+            structs = Arrays.stream(structsAnnotation.value()).map(Struct::name).toList();
+            for (Struct struct : structsAnnotation.value()) {
+                var javaName = validator.validateJavaName(struct.javaName());
+                PrettyName.addName(struct.name(), javaName);
+            }
         }
-        List<Type> enums = null;
+        List<String> enums = null;
         if (enumsAnnotation != null) {
-            enums = Arrays.stream(enumsAnnotation.value()).map(enoom -> new Type(enoom.name(), enoom.javaName())).toList();
-            Arrays.stream(enumsAnnotation.value()).forEach(enoom -> PrettyName.addName(enoom.name(), enoom.javaName()));
+            enums = Arrays.stream(enumsAnnotation.value()).map(Enum::name).toList();
+            for (Enum enoom : enumsAnnotation.value()) {
+                var javaName = validator.validateJavaName(enoom.javaName());
+                PrettyName.addName(enoom.name(), javaName);
+            }
         }
-        List<Type> unions = null;
+        List<String> unions = null;
         if (unionsAnnotation != null) {
-            unions = Arrays.stream(unionsAnnotation.value()).map(union -> new Type(union.name(), union.javaName())).toList();
-            Arrays.stream(unionsAnnotation.value()).forEach(union -> PrettyName.addName(union.name(), union.javaName()));
+            unions = Arrays.stream(unionsAnnotation.value()).map(Union::name).toList();
+            for (Union union : unionsAnnotation.value()) {
+                var javaName = validator.validateJavaName(union.javaName());
+                PrettyName.addName(union.name(), javaName);
+            }
         }
 
         var rootConstants = false;
         var debug = false;
         var systemHeader = false;
-        List<String> includes = Collections.emptyList();
-        List<String> systemIncludes = Collections.emptyList();
+        List<String> includes = emptyList();
+        List<String> systemIncludes = emptyList();
         if (options != null) {
             rootConstants = options.processRootConstants();
             includes = getHeaderPaths(options.includes()).stream().map(p -> "-I" + p.toFile().getAbsolutePath()).toList();
-            systemIncludes = Arrays.stream(options.systemIncludes()).map(p -> "-isystem" + p).toList();
+            systemIncludes = getHeaderPaths(options.systemIncludes()).stream().map(p -> "-isystem" + p.toFile().getAbsolutePath()).toList();
             debug = options.debugMode();
             systemHeader = options.systemHeader();
         }
@@ -149,7 +185,7 @@ public class NativeProcessor extends AbstractProcessor {
                     printStackTrace(e);
                 }
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
-                return Collections.emptyList();
+                return emptyList();
             }
         }
         var parser = new Parser(packageName, processingEnv.getMessager(), processingEnv.getFiler());
@@ -167,11 +203,11 @@ public class NativeProcessor extends AbstractProcessor {
             }
             return parsed;
         } catch (Throwable e) {
-            if (debug) {
-                printStackTrace(e);
-            }
+            //if (debug) {
+            printStackTrace(e);
+            //}
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
-            return Collections.emptyList();
+            return emptyList();
         }
     }
 
@@ -191,9 +227,6 @@ public class NativeProcessor extends AbstractProcessor {
     }
 
     private void processEnums(NativeMemoryNode node, boolean rootConstants) {
-        if (node.nodes().isEmpty()) {
-            return;
-        }
         var name = node.getName();
         if (node.getName().endsWith("_constants")) {
             if (!rootConstants) {
@@ -225,11 +258,6 @@ public class NativeProcessor extends AbstractProcessor {
             if (!(element instanceof ExecutableElement functionElement)) {
                 continue;
             }
-            var throwType = processingEnv.getElementUtils().getTypeElement(NativeMemoryException.class.getName()).asType();
-            if (!functionElement.getThrownTypes().contains(throwType)) {
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Method '" + functionElement + "' must throw NativeMemoryException!", functionElement);
-                break;
-            }
             var instance = NativeManualFunctionPrism.getInstanceOn(functionElement);
             if (instance == null) {
                 break;
@@ -240,7 +268,7 @@ public class NativeProcessor extends AbstractProcessor {
                 break;
             }
             List<ParameterNode> parameters = new ArrayList<>();
-            var returnType = OriginalType.of(processingEnv.getTypeUtils().erasure(functionElement.getReturnType()));
+            var returnType = OriginalType.of(functionElement.getReturnType());
             var returnNode = flatten.stream().filter(p -> PrettyName.getObjectName(p.getName()).equals(returnType.typeName())).findFirst().orElse(null);
             if (returnNode == null) {
                 var type = functionElement.getReturnType();
@@ -319,7 +347,7 @@ public class NativeProcessor extends AbstractProcessor {
 
     private FileObject tmpFile;
 
-    private List<Path> getHeaderPaths(String... headerFiles) {
+    private List<Path> getHeaderPaths(String... headerFiles) throws ValidationException {
         List<Path> paths = new ArrayList<>();
         for (String headerFile : headerFiles) {
             var beginVariable = headerFile.indexOf("${");
@@ -334,6 +362,7 @@ public class NativeProcessor extends AbstractProcessor {
                     continue;
                 }
             }
+            headerFile = validator.validatePath(headerFile);
             Path headerPath;
             if (headerFile.startsWith("/")) {
                 headerPath = Path.of(headerFile);
