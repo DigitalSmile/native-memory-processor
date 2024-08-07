@@ -1,4 +1,4 @@
-package io.github.digitalsmile.annotation.function;
+package io.github.digitalsmile.annotation.library;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -10,4 +10,5 @@ import java.lang.annotation.Target;
 public @interface NativeFunction {
     String name();
     String javaName() default "";
+    boolean useErrno() default false;
 }

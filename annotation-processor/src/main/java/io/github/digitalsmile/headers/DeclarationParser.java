@@ -1,6 +1,5 @@
 package io.github.digitalsmile.headers;
 
-import io.github.digitalsmile.NativeProcessor;
 import io.github.digitalsmile.PackageName;
 import io.github.digitalsmile.headers.mapping.OriginalType;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
@@ -16,9 +15,9 @@ import java.util.List;
 import java.util.stream.Stream;
 
 public class DeclarationParser {
-    private final List<NativeProcessor.Type> structs;
-    private final List<NativeProcessor.Type> unions;
-    private final List<NativeProcessor.Type> enums;
+    private final List<String> structs;
+    private final List<String> unions;
+    private final List<String> enums;
     private final Messager messager;
 
     private final boolean parseSystemHeaders;
@@ -27,7 +26,7 @@ public class DeclarationParser {
     private final boolean parseNoEnums;
     private final boolean parseNoUnions;
 
-    public DeclarationParser(Messager messager, List<NativeProcessor.Type> structs, List<NativeProcessor.Type> enums, List<NativeProcessor.Type> unions,
+    public DeclarationParser(Messager messager, List<String> structs, List<String> enums, List<String> unions,
                              boolean parseSystemHeaders) {
         this.messager = messager;
         this.parseSystemHeaders = parseSystemHeaders;
@@ -63,7 +62,7 @@ public class DeclarationParser {
     }
 
     private boolean skipParsing(String declarationName, Declaration.Scoped.Kind kind) {
-        var contains = Stream.of(structs, enums, unions).flatMap(List::stream).filter(t -> t.name().equals(declarationName)).findFirst().orElse(null) != null;
+        var contains = Stream.of(structs, enums, unions).flatMap(List::stream).filter(t -> t.equals(declarationName)).findFirst().orElse(null) != null;
         return switch (kind) {
             case STRUCT -> parseNoStructs || (!contains && !structs.isEmpty());
             case ENUM -> parseNoEnums || (!contains && !enums.isEmpty());
@@ -220,10 +219,15 @@ public class DeclarationParser {
                 var node = new NativeMemoryNode(declaration.name(), nodeType, OriginalType.ofObject(typeName), nextLevel, source);
                 if (nodeType.isAnonymous()) {
                     parseRoot(typeDeclared.tree(), node);
+                    return node;
                 } else if (notInScope(typeDeclared.tree())) {
                     parseDeclarations(typeDeclared.tree(), node, false);
+                    return node;
+                } else if (level > 1) {
+                    return node;
+                } else {
+                    return null;
                 }
-                return node;
             }
             default -> printWarning(declaration, "unknown field type " + type);
         }

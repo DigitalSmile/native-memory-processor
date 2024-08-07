@@ -30,10 +30,10 @@ jobs:
           distribution: 'corretto'
       - name: Get GCC 12 for system header files
         run: |
-          sudo apt install gcc-12
+          sudo apt-get update && sudo apt-get install gcc-12
       - name: Install libcurl library for tests
         run: |
-          sudo apt install libcurl4-openssl-dev
+          sudo apt-get update && sudo apt-get install libcurl4-openssl-dev
       - name: Get libcurl source for tests
         run: |
           cd annotation-processor-test/src/test/resources/libcurl && git clone --depth 1 https://github.com/curl/curl.git
