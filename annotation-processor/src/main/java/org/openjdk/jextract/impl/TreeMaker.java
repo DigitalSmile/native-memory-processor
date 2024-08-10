@@ -105,7 +105,7 @@ class TreeMaker {
 
     private Declaration createTreeInternal(Cursor c) {
         Position pos = CursorPosition.of(c);
-        if (pos == Position.NO_POSITION) return null; // intrinsic, skip
+        if (c.isInvalid() && pos == Position.NO_POSITION) return null; // intrinsic, skip
         // dedup multiple declarations that point to the same source location
         Cursor.Key key = c.toKey();
         Optional<Declaration> cachedDecl = lookup(key);
@@ -482,7 +482,11 @@ class TreeMaker {
     }
 
     Type toType(Cursor c) {
-        return TypeMaker.makeType(c.type(), this);
+        if (c.kind().equals(CursorKind.TypedefDecl)) {
+            return TypeMaker.makeType(c.typeOfTypeDef(), this);
+        } else {
+            return TypeMaker.makeType(c.type(), this);
+        }
     }
 
     private void checkCursor(Cursor c, CursorKind k) {

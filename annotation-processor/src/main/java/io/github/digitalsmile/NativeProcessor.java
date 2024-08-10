@@ -106,7 +106,25 @@ public class NativeProcessor extends AbstractProcessor {
                 }
 
                 if (automaticFunctionElements != null) {
-                    validator.validateAutomaticFunctions(parsed, automaticFunctionElements);
+                    var functions = flatten(parsed).stream().filter(n -> n.getNodeType().isFunction()).toList();
+                    validator.validateAutomaticFunctions(functions, automaticFunctionElements);
+
+                    List<FunctionNode> autoFunctions = new ArrayList<>();
+                    for (NativeMemoryNode node : functions) {
+                        List<ParameterNode> parameters = new ArrayList<>();
+                        for (NativeMemoryNode parameterNode : node.nodes()) {
+                            parameters.add(new ParameterNode(parameterNode.getName(), parameterNode, false, false));
+                        }
+
+                        var type = ((FunctionOriginalType) node.getType()).returns();
+                        //processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, type.typeName() + " " + type.carrierClass());
+                        autoFunctions.add(new FunctionNode(node.getName(), null,
+                                new NativeMemoryNode(type.typeName(), type, 0, Position.NO_POSITION), parameters, null));
+                    }
+                    var autoFunctionComposer = new AutoFunctionComposer(processingEnv.getMessager());
+                    var name = rootElement.getSimpleName().toString();
+                    var output = autoFunctionComposer.compose(packageName, PrettyName.getObjectName(name), autoFunctions);
+                    createGeneratedFile(packageName, PrettyName.getObjectName(name + "AutoFunctions"), output);
                 }
 
                 processFunctions(rootElement, manualFunctions, packageName, parsed, nativeOptions);
@@ -214,7 +232,8 @@ public class NativeProcessor extends AbstractProcessor {
     private void processOpaque(NativeMemoryNode node) {
         var opaqueComposer = new OpaqueComposer(processingEnv.getMessager());
         var output = opaqueComposer.compose(PrettyName.getObjectName(node.getName()), node);
-        createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
+        var packageName = PackageName.getPackageName(node.getName());
+        createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
     }
 
     private void processStructs(NativeMemoryNode node) {
@@ -223,7 +242,8 @@ public class NativeProcessor extends AbstractProcessor {
         }
         var structComposer = new StructComposer(processingEnv.getMessager());
         var output = structComposer.compose(PrettyName.getObjectName(node.getName()), node);
-        createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
+        var packageName = PackageName.getPackageName(node.getName());
+        createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
     }
 
     private void processEnums(NativeMemoryNode node, boolean rootConstants) {
@@ -236,13 +256,15 @@ public class NativeProcessor extends AbstractProcessor {
         }
         var enumComposer = new EnumComposer(processingEnv.getMessager());
         var output = enumComposer.compose(PrettyName.getObjectName(name), node);
-        createGeneratedFile(PackageName.getPackageName(name), PrettyName.getObjectName(name), output);
+        var packageName = PackageName.getPackageName(node.getName());
+        createGeneratedFile(packageName, PrettyName.getObjectName(name), output);
     }
 
     private void processUnions(NativeMemoryNode node) {
         var structComposer = new StructComposer(processingEnv.getMessager(), true);
         var output = structComposer.compose(PrettyName.getObjectName(node.getName()), node);
-        createGeneratedFile(PackageName.getPackageName(node.getName()), PrettyName.getObjectName(node.getName()), output);
+        var packageName = PackageName.getPackageName(node.getName());
+        createGeneratedFile(packageName, PrettyName.getObjectName(node.getName()), output);
     }
 
     private void processFunctions(Element rootElement, List<Element> functionElements, String packageName, List<NativeMemoryNode> parsed, NativeMemoryOptions nativeOptions) {

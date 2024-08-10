@@ -1,7 +1,7 @@
 package io.github.digitalsmile.gpio.shared;
 
 
-import io.github.digitalsmile.gpio.shared.structs.Stat;
+import io.github.digitalsmile.gpio.shared.system.Stat;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;

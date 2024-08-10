@@ -122,6 +122,11 @@ public final class Cursor extends ClangDisposable.Owned {
         return new Type(cursorType, owner);
     }
 
+    public Type typeOfTypeDef() {
+        var t = Index_h.clang_getTypedefDeclUnderlyingType(owner, segment);
+        return new Type(t, owner);
+    }
+
     public Type getEnumDeclIntegerType() {
         var enumType = Index_h.clang_getEnumDeclIntegerType(owner, segment);
         return new Type(enumType, owner);

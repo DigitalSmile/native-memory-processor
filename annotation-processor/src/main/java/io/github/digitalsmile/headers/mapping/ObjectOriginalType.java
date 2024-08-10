@@ -1,5 +1,7 @@
 package io.github.digitalsmile.headers.mapping;
 
+import io.github.digitalsmile.annotation.types.RawPointer;
+
 import java.lang.foreign.ValueLayout;
 
 public record ObjectOriginalType(String typeName, long alignment) implements OriginalType {
