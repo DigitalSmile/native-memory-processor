@@ -44,6 +44,9 @@ public final class JextractTool {
      * @return a toplevel declaration.
      */
     public static Declaration.Scoped parse(Path header, List<String> options) {
-        return new Parser().parse(header, options);
+        var l = new ArrayList<>(options);
+        //l.add("--target=arm-none-eabi-gcc");
+        //l.add("-std=c++17");
+        return new Parser().parse(header, l);
     }
 }

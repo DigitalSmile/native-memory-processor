@@ -11,35 +11,37 @@ import io.github.digitalsmile.annotation.structure.Enum;
 import io.github.digitalsmile.annotation.structure.Enums;
 import io.github.digitalsmile.annotation.structure.Struct;
 import io.github.digitalsmile.annotation.structure.Structs;
-import io.github.digitalsmile.gpio.libcurl.enums.CURLCode;
-import io.github.digitalsmile.gpio.libcurl.enums.CURLOption;
-import io.github.digitalsmile.gpio.libcurl.opaque.CurlInstance;
+import io.github.digitalsmile.gpio.libcurl.enums.CURLcode;
+import io.github.digitalsmile.gpio.libcurl.enums.CURLoption;
+import io.github.digitalsmile.gpio.libcurl.opaque.CURL;
 
 @NativeMemory(headers = "libcurl/curl/include/curl/curl.h")
 @NativeMemoryOptions(systemIncludes = {
-        "/usr/lib/gcc/x86_64-linux-gnu/12/include/"
-}, debugMode = true, processRootConstants = true)
+        //"/usr/lib/gcc/x86_64-linux-gnu/12/include/"
+        "/usr/lib/llvm-15/lib/clang/15.0.7/include/"
+}, debugMode = true, processRootConstants = true, systemHeader = true)
 @Structs({
-        @Struct(name = "CURL", javaName = "CurlInstance")
+  //      @Struct(name = "CURL", javaName = "CurlInstance")
 })
 @Enums({
-        @Enum(name = "CURLcode", javaName = "CURLCode"),
-        @Enum(name = "CURLoption", javaName = "CURLOption")
+//        @Enum(name = "CURLcode", javaName = "CURLCode"),
+//        @Enum(name = "CURLoption", javaName = "CURLOption")
 })
+@NativeMemoryLibrary
 public interface Libcurl {
 
     @NativeManualFunction(name = "curl_easy_init", library = "/usr/lib/x86_64-linux-gnu/libcurl.so")
-    CurlInstance easyInit() throws NativeMemoryException;
+    CURL easyInit() throws NativeMemoryException;
 
     @NativeManualFunction(name = "curl_global_init", library = "/usr/lib/x86_64-linux-gnu/libcurl.so")
-    CURLCode globalInit(long flags) throws NativeMemoryException;
+    CURLcode globalInit(long flags) throws NativeMemoryException;
 
     @NativeManualFunction(name = "curl_easy_setopt", library = "/usr/lib/x86_64-linux-gnu/libcurl.so")
-    CURLCode easySetOpt(CurlInstance curl, CURLOption option, String value) throws NativeMemoryException;
+    CURLcode easySetOpt(CURL curl, CURLoption option, String value) throws NativeMemoryException;
 
     @NativeManualFunction(name = "curl_easy_setopt", library = "/usr/lib/x86_64-linux-gnu/libcurl.so")
-    CURLCode easySetOpt(CurlInstance curl, CURLOption option, @ByAddress long value) throws NativeMemoryException;
+    CURLcode easySetOpt(CURL curl, CURLoption option, @ByAddress long value) throws NativeMemoryException;
 
     @NativeManualFunction(name = "curl_easy_perform", library = "/usr/lib/x86_64-linux-gnu/libcurl.so")
-    CURLCode easyPerform(CurlInstance curl) throws NativeMemoryException;
+    CURLcode easyPerform(CURL curl) throws NativeMemoryException;
 }

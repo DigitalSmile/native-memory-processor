@@ -6,6 +6,7 @@ import io.github.digitalsmile.PrettyName;
 import io.github.digitalsmile.annotation.types.interfaces.NativeMemoryLayout;
 import io.github.digitalsmile.headers.mapping.ArrayOriginalType;
 import io.github.digitalsmile.headers.mapping.ObjectOriginalType;
+import io.github.digitalsmile.headers.mapping.OriginalType;
 import io.github.digitalsmile.headers.mapping.PrimitiveOriginalType;
 import io.github.digitalsmile.headers.model.NativeMemoryNode;
 import io.github.digitalsmile.headers.model.NodeType;
@@ -76,7 +77,7 @@ public class StructComposer {
                         .addModifiers(Modifier.PUBLIC)
                         .addAnnotation(AnnotationSpec.builder(Override.class).build())
                         .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class).addMember("value", "$S", "unchecked").build())
-                        .addParameter(TypeName.get(MemorySegment.class), "buffer")
+                        .addParameter(TypeName.get(MemorySegment.class), "memoryBufferSegment")
                         .addException(TypeName.get(Throwable.class))
                         .returns(ClassName.get(packageName, prettyName))
                         .addCode(CodeBlock.join(processFromBodyStatements(node.nodes(), node), ""))
@@ -87,7 +88,7 @@ public class StructComposer {
                 .addMethod(MethodSpec.methodBuilder("toBytes")
                         .addModifiers(Modifier.PUBLIC)
                         .addAnnotation(AnnotationSpec.builder(Override.class).build())
-                        .addParameter(TypeName.get(MemorySegment.class), "buffer")
+                        .addParameter(TypeName.get(MemorySegment.class), "memoryBufferSegment")
                         .addException(TypeName.get(Throwable.class))
                         .returns(TypeName.VOID)
                         .addCode(CodeBlock.join(processToBodyStatements(node.nodes(), node), ""))
@@ -106,16 +107,22 @@ public class StructComposer {
         return outputFile.toString();
     }
 
-    private TypeName createType(String typeName, boolean isArray) {
-        var resolvedPackageName = PackageName.getPackageName(typeName);
-        if (typeName.equals(String.class.getSimpleName())) {
-            resolvedPackageName = "";
+    private TypeName createType(OriginalType type, boolean isArray) {
+        var typeName = type.typeName();
+        var clazz = type.carrierClass();
+        if (type.carrierClass().equals(Object.class)) {
+            var resolvedPackageName = PackageName.getPackageName(typeName);
+            if (typeName.equals(String.class.getSimpleName())) {
+                resolvedPackageName = "";
+            }
+            return ClassName.get(resolvedPackageName, PrettyName.getObjectName(typeName) + (isArray ? "[]" : ""));
+        } else {
+            return TypeName.get(isArray ? clazz.arrayType() : clazz);
         }
-        return ClassName.get(resolvedPackageName, PrettyName.getObjectName(typeName) + (isArray ? "[]" : ""));
     }
 
-    private TypeName createType(String typeName) {
-        return createType(typeName, false);
+    private TypeName createType(OriginalType type) {
+        return createType(type, false);
     }
 
     private List<FieldSpec> processConstructorParameters(List<NativeMemoryNode> nodes) {
@@ -126,7 +133,7 @@ public class StructComposer {
             switch (type) {
                 case ArrayOriginalType arrayType -> {
                     if (arrayType.isObjectType()) {
-                        fieldSpecs.add(FieldSpec.builder(createType(arrayType.typeName(), true), prettyName).build());
+                        fieldSpecs.add(FieldSpec.builder(createType(arrayType, true), prettyName).build());
                     } else {
                         fieldSpecs.add(FieldSpec.builder(arrayType.carrierClass().arrayType(), prettyName).build());
                     }
@@ -137,7 +144,7 @@ public class StructComposer {
                     if (node.getNodeType().isAnonymous()) {
                         fieldSpecs.addAll(processConstructorParameters(node.nodes()));
                     } else {
-                        fieldSpecs.add(FieldSpec.builder(createType(objectType.typeName()), prettyName).build());
+                        fieldSpecs.add(FieldSpec.builder(createType(objectType), prettyName).build());
                     }
                 }
                 default -> messager.printMessage(Diagnostic.Kind.ERROR, "unsupported type " + type);
@@ -193,7 +200,7 @@ public class StructComposer {
                         if (objectType.carrierClass().equals(String.class) || node.getNodeType().equals(NodeType.POINTER)) {
                             memoryLayouts.add(builder.add("$T.ADDRESS.withName($S)", ValueLayout.class, node.getName()).build());
                         } else {
-                            memoryLayouts.add(builder.add("$T.LAYOUT.withName($S)", createType(objectType.typeName()), node.getName()).build());
+                            memoryLayouts.add(builder.add("$T.LAYOUT.withName($S)", createType(objectType), node.getName()).build());
                         }
                     }
                 }
@@ -277,7 +284,7 @@ public class StructComposer {
                         } else if (objectType.typeName().equals(parentNode.getName())) {
                             statements.add(builder.add("null").build());
                         } else {
-                            statements.add(builder.add("$T.createEmpty()", createType(objectType.typeName())).build());
+                            statements.add(builder.add("$T.createEmpty()", createType(objectType)).build());
                         }
                     }
                 }
@@ -298,7 +305,7 @@ public class StructComposer {
                     if (arrayType.isObjectType()) {
                         var prettyObjectName = PrettyName.getObjectName(type.typeName());
                         statements.add(builder
-                                .addStatement("var $LMemorySegment = invokeExact(MH_$L, buffer)", prettyName, node.getName().toUpperCase())
+                                .addStatement("var $LMemorySegment = invokeExact(MH_$L, memoryBufferSegment)", prettyName, node.getName().toUpperCase())
                                 .addStatement("var $L = new $L[$L]", prettyName, prettyObjectName, arrayType.arraySize())
                                 .beginControlFlow("for(int i = 0; i < $L; i++)", arrayType.arraySize())
                                 .addStatement("var tmp = $L.createEmpty()", prettyObjectName)
@@ -314,27 +321,28 @@ public class StructComposer {
                     if (node.getNodeType().isAnonymous()) {
                         statements.add(builder
                                 .addStatement("var $LSize = LAYOUT.select($T.groupElement($S)).byteSize()", prettyName, MemoryLayout.PathElement.class, node.getName())
-                                .addStatement("var $LBuffer = buffer.asSlice(LAYOUT.byteSize() - $LSize, $LSize)", prettyName, prettyName, prettyName)
+                                .addStatement("var $LBuffer = memoryBufferSegment.asSlice(LAYOUT.byteSize() - $LSize, $LSize)", prettyName, prettyName, prettyName)
                                 .build());
 
                         for (NativeMemoryNode innerNode : node.nodes()) {
                             if (innerNode.getType() instanceof ObjectOriginalType) {
                                 var prettyInnerName = PrettyName.getVariableName(innerNode.getName());
+                                var typeName = createType(innerNode.getType());
                                 statements.add(CodeBlock.builder()
                                         .addStatement("var $LMemorySegment = invokeExact(MH_$L, $LBuffer)", prettyInnerName, innerNode.getName().toUpperCase(), prettyName)
-                                        .addStatement("var $L = $L.createEmpty().fromBytes($LMemorySegment)", prettyInnerName,
-                                                PrettyName.getObjectName(innerNode.getType().typeName()), prettyInnerName)
+                                        .addStatement("var $L = $T.createEmpty().fromBytes($LMemorySegment)", prettyInnerName,
+                                                typeName, prettyInnerName)
                                         .build());
                             }
                         }
                     } else {
                         if (objectType.carrierClass().equals(String.class)) {
                             statements.add(builder
-                                    .addStatement("var $LMemorySegment = invokeExact(MH_$L, buffer)", prettyName, node.getName().toUpperCase())
+                                    .addStatement("var $LMemorySegment = invokeExact(MH_$L, memoryBufferSegment)", prettyName, node.getName().toUpperCase())
                                     .addStatement("var $L = $LMemorySegment.reinterpret(Integer.MAX_VALUE).getString(0)", prettyName, prettyName)
                                     .build());
                         } else {
-                            builder.addStatement("var $LMemorySegment = invokeExact(MH_$L, buffer)", prettyName, node.getName().toUpperCase());
+                            builder.addStatement("var $LMemorySegment = invokeExact(MH_$L, memoryBufferSegment)", prettyName, node.getName().toUpperCase());
                             if (objectType.typeName().equals(parentNode.getName())) {
                                 builder.addStatement("$L $L = null", PrettyName.getObjectName(objectType.typeName()), prettyName);
                                 builder.beginControlFlow("if (!$LMemorySegment.get($T.ADDRESS, 0).equals($T.NULL))", prettyName, ValueLayout.class, MemorySegment.class);
@@ -342,8 +350,9 @@ public class StructComposer {
                                         .endControlFlow();
                                 statements.add(builder.build());
                             } else {
+                                var typeName = createType(objectType);
                                 statements.add(builder
-                                        .addStatement("var $L = $L.createEmpty().fromBytes($LMemorySegment)", prettyName, PrettyName.getObjectName(objectType.typeName()), prettyName)
+                                        .addStatement("var $L = $T.createEmpty().fromBytes($LMemorySegment)", prettyName, typeName, prettyName)
                                         .build());
                             }
                         }
@@ -361,7 +370,7 @@ public class StructComposer {
             var type = node.getType();
             var bufferName = parentNode.getNodeType().isAnonymous() ?
                     CodeBlock.builder().add("$LBuffer", PrettyName.getVariableName(parentNode.getName())).build() :
-                    CodeBlock.builder().add("buffer").build();
+                    CodeBlock.builder().add("memoryBufferSegment").build();
             var builder = CodeBlock.builder();
             var prettyName = PrettyName.getVariableName(node.getName());
             switch (type) {
@@ -403,7 +412,7 @@ public class StructComposer {
                         if (parentNodeType.isAnonymous()) {
                             builder.add(CodeBlock.builder().beginControlFlow("if ($L.length > 0)", prettyVariableName).build());
                         }
-                        builder.addStatement("var $LTmp = invokeExact(MH_$L, buffer)", prettyVariableName, node.getName().toUpperCase())
+                        builder.addStatement("var $LTmp = invokeExact(MH_$L, memoryBufferSegment)", prettyVariableName, node.getName().toUpperCase())
                                 .beginControlFlow("for (int i = 0; i < $L.length; i++)", prettyVariableName)
                                 .addStatement("$L[i].toBytes($LTmp.asSlice($L.LAYOUT.byteSize() * i, $L.LAYOUT.byteSize()))",
                                         prettyVariableName, prettyVariableName, PrettyName.getObjectName(arrayType.typeName()), PrettyName.getObjectName(arrayType.typeName()))
@@ -417,7 +426,7 @@ public class StructComposer {
                         if (parentNodeType.isAnonymous()) {
                             builder.add(CodeBlock.builder().beginControlFlow("if ($L$L)", prettyVariableName, arrayType.isNotArrayEmpty()).build());
                         }
-                        builder.addStatement("var $LTmp = invokeExact(MH_$L, buffer)", prettyVariableName, node.getName().toUpperCase())
+                        builder.addStatement("var $LTmp = invokeExact(MH_$L, memoryBufferSegment)", prettyVariableName, node.getName().toUpperCase())
                                 .beginControlFlow("for (int i = 0; i < $L.length; i++)", prettyVariableName)
                                 .addStatement("$LTmp.setAtIndex($T.$L, i, $L[i])", prettyVariableName, ValueLayout.class,
                                         arrayType.valueLayoutName(), prettyVariableName)
@@ -435,7 +444,7 @@ public class StructComposer {
                     }
                     var bufferName = node.getNodeType().isAnonymous() ?
                             CodeBlock.builder().add("$LBuffer", PrettyName.getVariableName(node.getName())).build() :
-                            CodeBlock.builder().add("buffer").build();
+                            CodeBlock.builder().add("memoryBufferSegment").build();
                     builder.addStatement("VH_$L.set($L, 0L, $L)", node.getName().toUpperCase(), bufferName, prettyVariableName);
                     if (parentNodeType.isAnonymous()) {
                         builder.add(CodeBlock.builder().endControlFlow().build());
@@ -450,17 +459,17 @@ public class StructComposer {
                         if (parentNodeType.isAnonymous()) {
                             var builder = CodeBlock.builder();
                             builder.add(CodeBlock.builder().beginControlFlow("if (!$L.isEmpty())", prettyVariableName).build());
-                            builder.addStatement("var $LTmp = invokeExact(MH_$L, buffer)", prettyVariableName, node.getName().toUpperCase())
+                            builder.addStatement("var $LTmp = invokeExact(MH_$L, memoryBufferSegment)", prettyVariableName, node.getName().toUpperCase())
                                     .addStatement("$L.toBytes($LTmp)", prettyVariableName, prettyVariableName);
                             builder.add(CodeBlock.builder().endControlFlow().build());
                             statements.add(builder.build());
                         } else {
                             var builder = CodeBlock.builder();
                             if (objectType.carrierClass().equals(String.class)) {
-                                builder.addStatement("var $LTmp = invokeExact(MH_$L, buffer)", prettyVariableName, node.getName().toUpperCase())
+                                builder.addStatement("var $LTmp = invokeExact(MH_$L, memoryBufferSegment)", prettyVariableName, node.getName().toUpperCase())
                                         .addStatement("$LTmp.setString(0, $L)", prettyVariableName, prettyVariableName);
                             } else {
-                                builder.addStatement("var $LTmp = invokeExact(MH_$L, buffer)", prettyVariableName, node.getName().toUpperCase());
+                                builder.addStatement("var $LTmp = invokeExact(MH_$L, memoryBufferSegment)", prettyVariableName, node.getName().toUpperCase());
                                 if (type.typeName().equals(parentNode.getName())) {
                                     builder.beginControlFlow("if ($L != null)", prettyVariableName);
                                     builder.addStatement("$L.toBytes($LTmp.reinterpret(LAYOUT.byteSize()))", prettyVariableName, prettyVariableName);

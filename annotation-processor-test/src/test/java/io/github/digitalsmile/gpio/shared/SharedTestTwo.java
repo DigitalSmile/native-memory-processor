@@ -7,7 +7,7 @@ import io.github.digitalsmile.annotation.function.NativeManualFunction;
 import io.github.digitalsmile.annotation.function.Returns;
 import io.github.digitalsmile.annotation.structure.Struct;
 import io.github.digitalsmile.annotation.structure.Structs;
-import io.github.digitalsmile.gpio.shared.structs.Stat;
+import io.github.digitalsmile.gpio.shared.system.Stat;
 
 @NativeMemory(headers = "/usr/include/x86_64-linux-gnu/sys/stat.h")
 @NativeMemoryOptions(systemHeader = true)

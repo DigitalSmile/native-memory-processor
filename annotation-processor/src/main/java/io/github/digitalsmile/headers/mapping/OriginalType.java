@@ -1,6 +1,7 @@
 package io.github.digitalsmile.headers.mapping;
 
 import com.squareup.javapoet.CodeBlock;
+import io.github.digitalsmile.annotation.types.RawPointer;
 import org.openjdk.jextract.Type;
 
 import javax.lang.model.type.ArrayType;
@@ -8,6 +9,7 @@ import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import java.lang.foreign.AddressLayout;
 import java.lang.foreign.ValueLayout;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -62,8 +64,8 @@ public interface OriginalType {
             List.of(Short), ValueLayout.JAVA_SHORT,
             List.of(Float), ValueLayout.JAVA_FLOAT,
             List.of(Double, LongDouble), ValueLayout.JAVA_DOUBLE,
-            List.of(Bool), ValueLayout.JAVA_BOOLEAN,
-            List.of(Void), ValueLayout.ADDRESS
+            List.of(Bool), ValueLayout.JAVA_BOOLEAN
+            //List.of(Void), ValueLayout.ADDRESS
     );
 
 
@@ -125,13 +127,36 @@ public interface OriginalType {
                 return ofObject(typeDeclared.tree().name());
             }
             case Type.Delegated typeDelegated -> {
-                return of(typeDelegated.type());
+                if (typeDelegated.kind().equals(Type.Delegated.Kind.TYPEDEF)) {
+                    var name = typeDelegated.name().orElse("");
+                    if (typeDelegated.type() instanceof Type.Declared) {
+                        return ofObject(name);
+                    } else if (typeDelegated.type() instanceof Type.Primitive typePrimitive && typePrimitive.kind().equals(Void)) {
+                        return ofObject(name);
+                    } else {
+                        return of(typeDelegated.type());
+                    }
+                } else if (typeDelegated.kind().equals(Type.Delegated.Kind.POINTER) && typeDelegated.type() instanceof Type.Primitive primitiveType && primitiveType.kind().equals(Char)) {
+                    return ofObject(String.class.getCanonicalName());
+                } else if (typeDelegated.kind().equals(Type.Delegated.Kind.POINTER) && typeDelegated.type() instanceof Type.Primitive primitiveType && primitiveType.kind().equals(Void)) {
+                    return ofObject(RawPointer.class.getCanonicalName());
+                } else {
+                    return of(typeDelegated.type());
+                }
             }
             case Type.Primitive typePrimitive -> {
-                return new PrimitiveOriginalType(typePrimitive.kind().typeName(), find(typePrimitive.kind()));
+                if (typePrimitive.kind().equals(Type.Primitive.Kind.Void)) {
+                    return ofObject(typePrimitive.kind().typeName());
+                } else {
+                    return new PrimitiveOriginalType(typePrimitive.kind().typeName(), find(typePrimitive.kind()));
+                }
             }
-            case Type.Function _ -> {
-                return new FunctionOriginalType();
+            case Type.Function typeFunction -> {
+                return new FunctionOriginalType(
+                        of(typeFunction.returnType()),
+                        typeFunction.argumentTypes().stream().map(OriginalType::of).toList(),
+                        typeFunction.parameterNames().orElse(Collections.emptyList())
+                );
             }
             default -> {
                 throw new IllegalArgumentException("Type " + type + " is not supported");

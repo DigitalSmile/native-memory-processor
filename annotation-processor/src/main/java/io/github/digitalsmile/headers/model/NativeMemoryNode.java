@@ -87,8 +87,10 @@ public class NativeMemoryNode implements Node {
     public String getText() {
         var builder = new StringBuilder();
         builder.append(name);
-        if (!nodeType.equals(NodeType.VARIABLE) && !nodeType.equals(NodeType.ROOT) && level <= 1) {
-            builder.append(" ").append(nodeType).append(" from ").append(position.path());
+        if (nodeType.isFunction()) {
+            builder.append(" ").append(nodeType).append(": ").append(type).append(" ").append(position);
+        } else if (!nodeType.equals(NodeType.VARIABLE) && !nodeType.equals(NodeType.ROOT) && level <= 1) {
+            builder.append(" ").append(nodeType).append(" from ").append(position);
         } else if (!nodeType.equals(NodeType.ROOT)) {
             builder.append(" ");
             if (!nodeType.equals(NodeType.VARIABLE)) {

@@ -9,6 +9,7 @@ import org.openjdk.jextract.Type;
 
 import javax.annotation.processing.Messager;
 import javax.tools.Diagnostic;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -39,6 +40,10 @@ public class DeclarationParser {
         this.unions = unions != null ? unions : Collections.emptyList();
         this.enums = enums != null ? enums : Collections.emptyList();
     }
+
+    private static final List<String> builtinOpaques = List.of(
+            "FILE", "va_list", "__va_list_tag"
+    );
 
     private boolean notInScope(Declaration declaration) {
         return declaration.pos().isSystemHeader();
@@ -71,26 +76,28 @@ public class DeclarationParser {
         };
     }
 
-    private String parseScoped(Declaration.Scoped declarationScoped, NodeType nodeType, String namePrefix) {
+    private String parseScoped(Declaration.Scoped declarationScoped, NodeType nodeType, String namePrefix, boolean isSystem) {
         var name = declarationScoped.name();
         switch (declarationScoped.kind()) {
             case STRUCT -> {
                 if (nodeType.isAnonymous()) {
                     name = namePrefix + "_struct_" + structCount++;
                 }
-                PackageName.addPackage(name, nodeType.equals(NodeType.OPAQUE) ? "opaque" : "structs");
+                PackageName.addPackage(name, isSystem ? "system"
+                        : (nodeType.equals(NodeType.OPAQUE) ? "opaque" : "structs")
+                );
             }
             case ENUM -> {
                 if (nodeType.isAnonymous()) {
                     name = namePrefix + "_enum_" + enumCount++;
                 }
-                PackageName.addPackage(name, "enums");
+                PackageName.addPackage(name, isSystem ? "system" : "enums");
             }
             case UNION -> {
                 if (nodeType.isAnonymous()) {
                     name = namePrefix + "_union_" + unionCount++;
                 }
-                PackageName.addPackage(name, "unions");
+                PackageName.addPackage(name, isSystem ? "system" : "unions");
             }
             case BITFIELDS -> {
                 messager.printMessage(Diagnostic.Kind.WARNING, "unsupported scoped kind " + declarationScoped.kind() + " " + declarationScoped.pos());
@@ -108,10 +115,16 @@ public class DeclarationParser {
                 }
                 var nodeType = getNodeType(declarationScoped, declarationScoped.attributes());
                 var namePrefix = isTopLevel ? parentNode.getName() : "internal";
-                var name = parseScoped(declarationScoped, nodeType, namePrefix);
-                var node = new NativeMemoryNode(name, nodeType, OriginalType.ofObject(name), parentNode.getLevel() + 1, declarationScoped.pos());
-                parseRoot(declarationScoped, node);
-                parentNode.addNode(node);
+                var name = parseScoped(declarationScoped, nodeType, namePrefix, declaration.pos().isSystemHeader());
+                if (builtinOpaques.contains(name)) {
+                    nodeType = NodeType.OPAQUE;
+                    var node = new NativeMemoryNode(name, nodeType, OriginalType.ofObject(name), parentNode.getLevel() + 1, declarationScoped.pos());
+                    parentNode.addNode(node);
+                } else {
+                    var node = new NativeMemoryNode(name, nodeType, OriginalType.ofObject(name), parentNode.getLevel() + 1, declarationScoped.pos());
+                    parseRoot(declarationScoped, node);
+                    parentNode.addNode(node);
+                }
             }
             case Declaration.Constant declarationConstant -> {
                 var node = parseVariable(declarationConstant, declarationConstant.type(), parentNode.getLevel());
@@ -135,9 +148,9 @@ public class DeclarationParser {
                     messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration type " + declarationBitfield.type());
             case Declaration.Variable declarationVariable -> {
                 switch (declarationVariable.kind()) {
-                    case GLOBAL, BITFIELD, PARAMETER ->
+                    case BITFIELD, PARAMETER ->
                             messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration kind " + declarationVariable.kind() + " " + declarationVariable.pos());
-                    case FIELD -> {
+                    case GLOBAL, FIELD -> {
                         var node = parseVariable(declarationVariable, declarationVariable.type(), parentNode.getLevel());
                         if (node != null) {
                             parentNode.addNode(node);
@@ -151,7 +164,20 @@ public class DeclarationParser {
                     parentNode.addNode(node);
                 }
             }
-            case Declaration.Function _ -> {
+            case Declaration.Function declarationFunction -> {
+                List<NativeMemoryNode> nodes = new ArrayList<>();
+                var nextLevel = parentNode.getLevel() + 1;
+                for (Declaration.Variable declarationVariable : declarationFunction.parameters()) {
+                    var parsedNode = parseVariable(declarationVariable, declarationVariable.type(), nextLevel);
+                    if (parsedNode == null) {
+                        return;
+                    }
+                    nodes.add(parsedNode);
+                }
+                var type = declarationFunction.type().withParameterNames(nodes.stream().map(NativeMemoryNode::getName).toList());
+                var node = new NativeMemoryNode(declarationFunction.name(), NodeType.FUNCTION, OriginalType.of(type), nextLevel, declarationFunction.pos());
+                node.addNodes(nodes);
+                parentNode.addNode(node);
             }
             default ->
                     messager.printMessage(Diagnostic.Kind.WARNING, "unsupported declaration type " + declaration.name() + " " + declaration.pos());
@@ -173,14 +199,20 @@ public class DeclarationParser {
                     printWarning(declaration, "type " + type + " is not valid C/C++ constructions and will be skipped.");
                     return null;
                 }
-                return new NativeMemoryNode(declaration.name(), OriginalType.of(typeArray), nextLevel, source);
+                var originalType = OriginalType.of(typeArray);
+                if (builtinOpaques.contains(originalType.typeName())) {
+                    PackageName.addPackage(originalType.typeName(), "system");
+                    return new NativeMemoryNode(originalType.typeName(), NodeType.OPAQUE, OriginalType.of(typeArray), nextLevel, source);
+                } else {
+                    return new NativeMemoryNode(declaration.name(), originalType, nextLevel, source);
+                }
             }
             case Type.Primitive typePrimitive -> {
                 if (declaration instanceof Declaration.Constant declarationConstant) {
                     return new NativeMemoryNode(declaration.name(), OriginalType.of(typePrimitive), nextLevel, source, declarationConstant.value());
                 } else {
                     if (typePrimitive.kind().equals(Type.Primitive.Kind.Void)) {
-                        PackageName.addPackage(declaration.name(), "opaque");
+                        PackageName.addPackage(declaration.name(), declaration.pos().isSystemHeader() ? "system" : "opaque");
                         return new NativeMemoryNode(declaration.name(), NodeType.OPAQUE, OriginalType.ofObject(declaration.name()), nextLevel, source);
                     } else {
                         return new NativeMemoryNode(declaration.name(), OriginalType.of(typePrimitive), nextLevel, source);
@@ -197,10 +229,7 @@ public class DeclarationParser {
                         }
                     }
                     case POINTER, TYPEDEF -> {
-                        var originalType = OriginalType.of(typeDelegated.type());
-                        if (originalType.carrierClass().equals(byte.class)) {
-                            originalType = OriginalType.ofObject(String.class.getSimpleName());
-                        }
+                        var originalType = OriginalType.of(typeDelegated);
                         if (declaration instanceof Declaration.Constant declarationConstant) {
                             return new NativeMemoryNode(declaration.name(), originalType, nextLevel, source, declarationConstant.value());
                         } else {
@@ -220,10 +249,16 @@ public class DeclarationParser {
                 if (nodeType.isAnonymous()) {
                     parseRoot(typeDeclared.tree(), node);
                     return node;
-                } else if (notInScope(typeDeclared.tree())) {
+                } else if (notInScope(typeDeclared.tree()) && !builtinOpaques.contains(declaration.name())) {
                     parseDeclarations(typeDeclared.tree(), node, false);
                     return node;
-                } else if (level > 1) {
+                } else if (nextLevel > 1) {
+                    return node;
+                } else if (builtinOpaques.contains(declaration.name())) {
+                    PackageName.addPackage(declaration.name(), "system");
+                    return new NativeMemoryNode(declaration.name(), NodeType.OPAQUE, OriginalType.ofObject(typeName), nextLevel, source);
+                } else if (nodeType.isOpaque()) {
+                    PackageName.addPackage(declaration.name(), "opaque");
                     return node;
                 } else {
                     return null;

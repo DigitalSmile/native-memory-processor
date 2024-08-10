@@ -16,8 +16,10 @@ import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 public class Parser {
 
@@ -46,7 +48,13 @@ public class Parser {
             }
 
             var newRoot = new NativeMemoryNode(rootName, NodeType.ROOT);
-            prepareStructure(newRoot, root);
+            List<NativeMemoryNode> systemHeaders = Collections.emptyList();
+            if (systemHeader) {
+                systemHeaders = flatten(root.nodes()).stream().filter(p -> p.getPosition().isSystemHeader()).toList();
+                clearFromSystemHeaders(root, systemHeaders);
+            }
+            prepareStructure(newRoot, root, systemHeaders, systemHeader);
+
             newRoot.addNodes(root.nodes());
 
             if (debug) {
@@ -58,25 +66,55 @@ public class Parser {
         return nodes;
     }
 
-    private void prepareStructure(NativeMemoryNode rootNode, NativeMemoryNode parentNode) {
+    private List<NativeMemoryNode> flatten(List<NativeMemoryNode> nodes) {
+        return nodes.stream().flatMap(i -> Stream.concat(Stream.of(i), flatten(i.nodes()).stream())).toList();
+    }
+
+    private void clearFromSystemHeaders(NativeMemoryNode parentNode, List<NativeMemoryNode> systemHeaderNodes) {
         var iterator = parentNode.nodes().listIterator();
 
         while (iterator.hasNext()) {
             var node = iterator.next();
-            var nodeType = node.getNodeType();
-            var type = node.getType();
-            var contains = rootNode.nodes().stream().anyMatch(p -> p.getName().equals(type.typeName()));
-            if (node.getLevel() > 1 && !nodeType.isVariable() && !nodeType.equals(NodeType.ANON_UNION) && !node.nodes().isEmpty() && !contains) {
-                var newNodeType = makeNotAnonymous(nodeType);
-                var newNode = new NativeMemoryNode(node.getName(), newNodeType, node.getType(), 1, node.getPosition(), node.getValue());
-                iterator.set(newNode);
-                var typeName = type.typeName();
-                PackageName.addPackage(typeName, "nested");
-                var rebuildNode = new NativeMemoryNode(typeName, newNodeType, node.getType(), node.getLevel(), node.getPosition(), node.getValue());
-                rebuildNode.addNodes(node.nodes());
-                rootNode.addNode(rebuildNode);
+            if (systemHeaderNodes.stream().anyMatch(p -> p.getPosition().equals(node.getPosition()))) {
+                iterator.remove();
+                continue;
             }
-            prepareStructure(rootNode, node);
+            clearFromSystemHeaders(node, systemHeaderNodes);
+        }
+    }
+
+    private void prepareStructure(NativeMemoryNode rootNode, NativeMemoryNode parentNode, List<NativeMemoryNode> systemHeaderNodes, boolean systemHeader) {
+        var iterator = parentNode.nodes().listIterator();
+
+        while (iterator.hasNext()) {
+            var node = iterator.next();
+            if (node.getLevel() == 0) {
+                prepareStructure(rootNode, node, systemHeaderNodes, systemHeader);
+            } else {
+                var nodeType = node.getNodeType();
+                var type = node.getType();
+
+            if (systemHeader) {
+                var foundReference = systemHeaderNodes.stream().filter(p -> p.getName().equals(type.typeName())).findFirst().orElse(null);
+                if (foundReference != null && !rootNode.nodes().contains(foundReference)) {
+                    rootNode.addNode(foundReference);
+                    prepareStructure(rootNode, foundReference, systemHeaderNodes, systemHeader);
+                }
+            }
+
+                var contains = rootNode.nodes().stream().anyMatch(p -> p.getName().equals(type.typeName()));
+                if (node.getLevel() > 1 && !nodeType.isVariable() && !nodeType.equals(NodeType.ANON_UNION) && !node.nodes().isEmpty() && !contains) {
+                    var newNodeType = makeNotAnonymous(nodeType);
+                    var newNode = new NativeMemoryNode(node.getName(), newNodeType, node.getType(), 1, node.getPosition(), node.getValue());
+                    iterator.set(newNode);
+                    var typeName = type.typeName();
+                    PackageName.addPackage(typeName, "nested");
+                    var rebuildNode = new NativeMemoryNode(typeName, newNodeType, node.getType(), node.getLevel(), node.getPosition(), node.getValue());
+                    rebuildNode.addNodes(node.nodes());
+                    rootNode.addNode(rebuildNode);
+                }
+                prepareStructure(rootNode, node, systemHeaderNodes, systemHeader);
+            }
         }
     }
 

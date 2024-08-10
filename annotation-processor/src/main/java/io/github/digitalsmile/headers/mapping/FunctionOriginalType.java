@@ -1,26 +1,27 @@
 package io.github.digitalsmile.headers.mapping;
 
 import java.lang.foreign.ValueLayout;
+import java.util.List;
 
-public record FunctionOriginalType() implements OriginalType {
+public record FunctionOriginalType(OriginalType returns, List<OriginalType> parameterTypes, List<String> parameterNames) implements OriginalType {
 
     @Override
     public String typeName() {
-        return "Unsupported";
+        return returns.typeName();
     }
 
     @Override
     public Class<?> carrierClass() {
-        return void.class;
+        return returns.carrierClass();
     }
 
     @Override
     public ValueLayout valueLayout() {
-        return ValueLayout.ADDRESS;
+        return returns.valueLayout();
     }
 
     @Override
     public String toString() {
-        return "function type (unsupported)";
+        return "(" + parameterTypes + ") (" + parameterNames + ") (returns: " + returns.typeName() + ")";
     }
 }
