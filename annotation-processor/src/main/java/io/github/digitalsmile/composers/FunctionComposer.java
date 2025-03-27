@@ -116,25 +116,49 @@ public class FunctionComposer {
                 }
             }
 
-            if (options.useErrno()) {
-                methodBody.addStatement("var capturedState = context.allocate(CAPTURED_STATE_LAYOUT)");
-                methodBody.addStatement("var callResult = (int) $T.$L.invoke(capturedState, $L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
-                methodBody.addStatement("processError(callResult, capturedState, $S, $L)", functionNode.functionName(), CodeBlock.join(arguments, ", "));
-            } else {
-                if (returnType.carrierClass().equals(void.class)) {
-                    methodBody.addStatement("$T.$L.invoke($L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+            if (options.nativeReturnType().carrierClass() == Void.class) {
+                if (options.useErrno()) {
+                    methodBody.addStatement("var capturedState = context.allocate(CAPTURED_STATE_LAYOUT)");
+                    methodBody.addStatement("var callResult = (int) $T.$L.invoke(capturedState, $L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                    methodBody.addStatement("processError(callResult, capturedState, $S, $L)", functionNode.functionName(), CodeBlock.join(arguments, ", "));
                 } else {
-                    switch (returnType) {
-                        case ArrayOriginalType _, ObjectOriginalType _ ->
-                                methodBody.addStatement("var callResult = ($T) $T.$L.invoke($L)",
-                                        functionNode.returnNode().getNodeType().isEnum() ? int.class : MemorySegment.class,
-                                        context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
-                        default -> methodBody.addStatement("var callResult = ($T) $T.$L.invoke($L)",
-                                returnType.carrierClass(),
-                                context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                    if (returnType.carrierClass().equals(void.class)) {
+                        methodBody.addStatement("$T.$L.invoke($L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                    } else {
+                        switch (returnType) {
+                            case ArrayOriginalType _, ObjectOriginalType _ ->
+                                    methodBody.addStatement("var callResult = ($T) $T.$L.invoke($L)",
+                                            functionNode.returnNode().getNodeType().isEnum() ? int.class : MemorySegment.class,
+                                            context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                            default -> methodBody.addStatement("var callResult = ($T) $T.$L.invoke($L)",
+                                    returnType.carrierClass(),
+                                    context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                        }
+                    }
+                }
+            } else {
+                if (options.useErrno()) {
+                    methodBody.addStatement("var capturedState = context.allocate(CAPTURED_STATE_LAYOUT)");
+                    methodBody.addStatement("var callResult = ($T) $T.$L.invoke(capturedState, $L)", options.nativeReturnType().carrierClass(), context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                    methodBody.addStatement("processError(callResult, capturedState, $S, $L)", functionNode.functionName(), CodeBlock.join(arguments, ", "));
+                } else {
+                    if (returnType.carrierClass().equals(void.class)) {
+                        methodBody.addStatement("$T.$L.invoke($L)", context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                    } else {
+                        switch (returnType) {
+                            case ArrayOriginalType _, ObjectOriginalType _ ->
+                                    methodBody.addStatement("var callResult = ($T) $T.$L.invoke($L)",
+                                            functionNode.returnNode().getNodeType().isEnum() ? int.class : MemorySegment.class,
+                                            context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                            default -> methodBody.addStatement("var callResult = ($T) $T.$L.invoke($L)",
+                                    returnType.carrierClass(),
+                                    context, nativeFunctionNames.get(functionNode), CodeBlock.join(arguments, ", "));
+                        }
                     }
                 }
             }
+
+
 
             if (!returnType.carrierClass().equals(void.class) && functionNode.functionParameters().stream().noneMatch(ParameterNode::returns)) {
                 if (returnType instanceof ObjectOriginalType) {

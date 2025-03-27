@@ -1,15 +1,10 @@
 package io.github.digitalsmile.gpio.functions;
 
-import io.github.digitalsmile.annotation.NativeMemory;
 import io.github.digitalsmile.annotation.function.*;
 import io.github.digitalsmile.annotation.NativeMemoryException;
-import io.github.digitalsmile.annotation.library.NativeFunction;
-import io.github.digitalsmile.annotation.library.NativeMemoryLibrary;
 import io.github.digitalsmile.annotation.types.interfaces.NativeMemoryLayout;
 
-import java.util.List;
-
-public interface FunctionTest {
+public interface LibcFunctions {
     @NativeManualFunction(name = "ioctl", useErrno = true)
     int callByValue(int fd, long command, long data) throws NativeMemoryException;
 
@@ -28,7 +23,7 @@ public interface FunctionTest {
     @NativeManualFunction(name = "close")
     void close(int fd) throws NativeMemoryException;
 
-    @NativeManualFunction(name = "read", useErrno = true)
+    @NativeManualFunction(name = "read", useErrno = true, nativeReturnType = int.class)
     byte[] read(int fd, @Returns @ByAddress byte[] buffer, int size) throws NativeMemoryException;
 
     @NativeManualFunction(name = "write", useErrno = true)

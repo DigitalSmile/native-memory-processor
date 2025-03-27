@@ -68,8 +68,8 @@ public class ContextComposer {
                 var options = functionNode.functionOptions();
                 var returnNode = functionNode.returnNode();
                 var returnType = returnNode.getType();
-                if (!returnType.carrierClass().equals(void.class)) {
-                    switch (returnType) {
+                if (options.nativeReturnType().carrierClass() != Void.class) {
+                    switch (options.nativeReturnType()) {
                         case PrimitiveOriginalType primitiveTypeMapping ->
                                 parameters.add(CodeBlock.builder().add("$T.$L", ValueLayout.class, primitiveTypeMapping.valueLayoutName()).build());
                         case ObjectOriginalType _, ArrayOriginalType _ -> {
@@ -80,6 +80,21 @@ public class ContextComposer {
                             }
                         }
                         default -> throw new IllegalStateException("Unexpected value: " + returnType);
+                    }
+                } else {
+                    if (!returnType.carrierClass().equals(void.class)) {
+                        switch (returnType) {
+                            case PrimitiveOriginalType primitiveTypeMapping ->
+                                    parameters.add(CodeBlock.builder().add("$T.$L", ValueLayout.class, primitiveTypeMapping.valueLayoutName()).build());
+                            case ObjectOriginalType _, ArrayOriginalType _ -> {
+                                if (returnNode.getNodeType().isEnum()) {
+                                    parameters.add(CodeBlock.builder().add("$T.JAVA_INT", ValueLayout.class).build());
+                                } else {
+                                    parameters.add(CodeBlock.builder().add("$T.ADDRESS", ValueLayout.class).build());
+                                }
+                            }
+                            default -> throw new IllegalStateException("Unexpected value: " + returnType);
+                        }
                     }
                 }
                 for (ParameterNode parameterNode : functionNode.functionParameters()) {

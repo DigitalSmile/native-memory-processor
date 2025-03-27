@@ -89,4 +89,11 @@ public @interface NativeManualFunction {
      * @return true if use errno/strerr
      */
     boolean useErrno() default false;
+
+    /**
+     * Native return type, as described in function docs.
+     *
+     * @return native function return type
+     */
+    Class<?> nativeReturnType() default Void.class;
 }

@@ -16,7 +16,7 @@ import io.github.digitalsmile.gpio.libvlc.structs.LibvlcModuleDescriptionT;
 @NativeMemory(headers = "libvlc/vlc/include/vlc/vlc.h")
 @NativeMemoryOptions(
         includes = "libvlc/vlc/include",
-        systemIncludes = "/usr/lib/gcc/x86_64-linux-gnu/12/include/",
+        systemIncludes = "/usr/lib/gcc/x86_64-linux-gnu/${gcc-version}/include/",
         debugMode = true
 )
 @Structs
