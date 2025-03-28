@@ -7,7 +7,7 @@ import io.github.digitalsmile.annotation.structure.Struct;
 import io.github.digitalsmile.annotation.structure.Structs;
 import io.github.digitalsmile.annotation.structure.Unions;
 
-@NativeMemory(headers = "/usr/src/linux-headers-${version}/include/uapi/linux/gpio.h")
+@NativeMemory(headers = "/usr/src/linux-headers-${linux-version}/include/uapi/linux/gpio.h")
 @NativeMemoryOptions(
         processRootConstants = true
 )
