@@ -223,7 +223,7 @@ public class DeclarationParser {
                 } else if (notInScope(typeDeclared.tree())) {
                     parseDeclarations(typeDeclared.tree(), node, false);
                     return node;
-                } else if (level > 1) {
+                } else if (level >= 1) {
                     return node;
                 } else {
                     return null;

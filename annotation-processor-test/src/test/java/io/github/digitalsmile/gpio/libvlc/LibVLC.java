@@ -1,9 +1,9 @@
 package io.github.digitalsmile.gpio.libvlc;
 
 import io.github.digitalsmile.annotation.NativeMemory;
+import io.github.digitalsmile.annotation.NativeMemoryException;
 import io.github.digitalsmile.annotation.NativeMemoryOptions;
 import io.github.digitalsmile.annotation.function.NativeManualFunction;
-import io.github.digitalsmile.annotation.NativeMemoryException;
 import io.github.digitalsmile.annotation.structure.Enums;
 import io.github.digitalsmile.annotation.structure.Structs;
 import io.github.digitalsmile.annotation.structure.Unions;
