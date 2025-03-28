@@ -1,4 +1,6 @@
 package io.github.digitalsmile.functions;
 
-public record FunctionOptions(String nativeFunctionName, boolean isAlreadyLoaded, boolean useErrno) {
+import io.github.digitalsmile.headers.mapping.OriginalType;
+
+public record FunctionOptions(String nativeFunctionName, boolean isAlreadyLoaded, boolean useErrno, OriginalType nativeReturnType) {
 }

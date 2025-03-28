@@ -42,9 +42,9 @@ jobs:
           cd annotation-processor-test/src/test/resources/libvlc && git clone --depth 1 https://github.com/videolan/vlc.git
       - name: Getting linux header version for tests
         run: |
-          echo "headerVersion=$(uname -r)" >> "$GITHUB_ENV"
+          echo "linuxVersion=$(uname -r)" >> "$GITHUB_ENV" && echo "gccVersion=12" >> "$GITHUB_ENV"
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
       - name: Build Gradle
         run: |
-          ./gradlew build -Dversion=$headerVersion
+          ./gradlew build -Dlinux-version=$linuxVersion -Dgcc-version=$gccVersion

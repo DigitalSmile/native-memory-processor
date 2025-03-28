@@ -298,7 +298,7 @@ public class NativeProcessor extends AbstractProcessor {
                 var parameterNode = new ParameterNode(variableName, node, returns != null, byAddress);
                 parameters.add(parameterNode);
             }
-            var functionOptions = new FunctionOptions(instance.name(), instance.isAlreadyLoaded(), instance.useErrno());
+            var functionOptions = new FunctionOptions(instance.name(), instance.isAlreadyLoaded(), instance.useErrno(), OriginalType.of(instance.nativeReturnType()));
             var functionNode = new FunctionNode(functionElement.getSimpleName().toString(), functionOptions, returnNode, parameters, functionElement.getTypeParameters());
             nodes.add(functionNode);
             var libraryFileName = instance.library();
@@ -398,7 +398,7 @@ public class NativeProcessor extends AbstractProcessor {
     }
 
     private File calculatePath(File directory) {
-        if (directory.isDirectory() && directory.getName().equals("build")) {
+        if (directory.isDirectory() && (directory.getName().equals("build") || directory.getName().equals("target"))) {
             return directory.getParentFile();
         }
         return calculatePath(directory.getParentFile());
