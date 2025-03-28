@@ -47,4 +47,4 @@ jobs:
         run: chmod +x ./gradlew
       - name: Build Gradle
         run: |
-          ./gradlew build -Dversion=$headerVersion
+          ./gradlew build -Dlinux-version=$linux-version -Dgcc-version=$gcc-version
