@@ -21,7 +21,7 @@ public class SharedTest {
 
         try (var statLib = new SharedTestTwoNative()) {
             var stats = statLib.stat(fd, Stat.createEmpty());
-            assertEquals(stats.stSize(), 35);
+            assertEquals(35, stats.stSize());
         }
     }
 }

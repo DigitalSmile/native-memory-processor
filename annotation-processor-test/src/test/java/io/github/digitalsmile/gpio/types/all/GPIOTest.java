@@ -24,10 +24,10 @@ public class GPIOTest {
             var newChipInfo = GpiochipInfo.createEmpty().fromBytes(memoryBuffer);
             assertArrayEquals(newChipInfo.name(), prepareByteArray(32, STRING));
             assertArrayEquals(newChipInfo.label(), prepareByteArray(32, STRING));
-            assertEquals(newChipInfo.lines(), 3);
+            assertEquals(3, newChipInfo.lines());
             assertTrue(GpiochipInfo.createEmpty().isEmpty());
 
-            assertEquals(GpioConstants.class.getFields().length, 40);
+            assertEquals(40, GpioConstants.class.getFields().length);
 
             //assertEquals(GpioConstants.values().length, 3);
 
@@ -35,26 +35,26 @@ public class GPIOTest {
             memoryBuffer = arena.allocate(eventData.getMemoryLayout());
             eventData.toBytes(memoryBuffer);
             var newEventData = GpioeventData.createEmpty().fromBytes(memoryBuffer);
-            assertEquals(newEventData.timestamp(), 100);
-            assertEquals(newEventData.id(), 5);
+            assertEquals(100, newEventData.timestamp());
+            assertEquals(5, newEventData.id());
             assertTrue(GpioeventData.createEmpty().isEmpty());
 
             var eventRequest = new GpioeventRequest(1, 2, 3, STRING, 4);
             memoryBuffer = arena.allocate(eventRequest.getMemoryLayout());
             eventRequest.toBytes(memoryBuffer);
             var newEventRequest = GpioeventRequest.createEmpty().fromBytes(memoryBuffer);
-            assertEquals(newEventRequest.lineoffset(), 1);
-            assertEquals(newEventRequest.handleflags(), 2);
-            assertEquals(newEventRequest.eventflags(), 3);
+            assertEquals(1, newEventRequest.lineoffset());
+            assertEquals(2, newEventRequest.handleflags());
+            assertEquals(3, newEventRequest.eventflags());
             assertArrayEquals(newEventRequest.consumerLabel(), prepareByteArray(32, STRING));
-            assertEquals(newEventRequest.fd(), 4);
+            assertEquals(4, newEventRequest.fd());
             assertTrue(GpioeventRequest.createEmpty().isEmpty());
 
             var handleConfig = new GpiohandleConfig(1, BYTE_ARRAY, INT_ARRAY);
             memoryBuffer = arena.allocate(handleConfig.getMemoryLayout());
             handleConfig.toBytes(memoryBuffer);
             var newHandleConfig = GpiohandleConfig.createEmpty().fromBytes(memoryBuffer);
-            assertEquals(newHandleConfig.flags(), 1);
+            assertEquals(1, newHandleConfig.flags());
             assertArrayEquals(newHandleConfig.defaultValues(), prepareByteArray(64, BYTE_ARRAY));
             assertArrayEquals(newHandleConfig.padding(), prepareIntArray(4, INT_ARRAY));
             assertTrue(GpiohandleConfig.createEmpty().isEmpty());
@@ -71,19 +71,19 @@ public class GPIOTest {
             handleRequest.toBytes(memoryBuffer);
             var newHandleRequest = GpiohandleRequest.createEmpty().fromBytes(memoryBuffer);
             assertArrayEquals(newHandleRequest.lineoffsets(), prepareIntArray(64, INT_ARRAY));
-            assertEquals(newHandleRequest.flags(), 1);
+            assertEquals(1, newHandleRequest.flags());
             assertArrayEquals(newHandleRequest.defaultValues(), prepareByteArray(64, BYTE_ARRAY));
             assertArrayEquals(newHandleRequest.consumerLabel(), prepareByteArray(32, STRING));
-            assertEquals(newHandleRequest.lines(), 2);
-            assertEquals(newHandleRequest.fd(), 3);
+            assertEquals(2, newHandleRequest.lines());
+            assertEquals(3, newHandleRequest.fd());
             assertTrue(GpiohandleRequest.createEmpty().isEmpty());
 
             var lineInfo = new GpiolineInfo(1, 2, STRING, STRING);
             memoryBuffer = arena.allocate(lineInfo.getMemoryLayout());
             lineInfo.toBytes(memoryBuffer);
             var newLineInfo = GpiolineInfo.createEmpty().fromBytes(memoryBuffer);
-            assertEquals(newLineInfo.lineOffset(), 1);
-            assertEquals(newLineInfo.flags(), 2);
+            assertEquals(1, newLineInfo.lineOffset());
+            assertEquals(2, newLineInfo.flags());
             assertArrayEquals(newLineInfo.name(), prepareByteArray(32, STRING));
             assertArrayEquals(newLineInfo.consumer(), prepareByteArray(32, STRING));
             assertTrue(GpiolineInfo.createEmpty().isEmpty());
@@ -93,8 +93,8 @@ public class GPIOTest {
             lineInfoChanged.toBytes(memoryBuffer);
             var newLineInfoChanged = GpiolineInfoChanged.createEmpty().fromBytes(memoryBuffer);
             assertThat(newLineInfoChanged.info()).usingRecursiveComparison().isEqualTo(newLineInfo);
-            assertEquals(newLineInfoChanged.timestamp(), 1);
-            assertEquals(newLineInfoChanged.eventType(), 2);
+            assertEquals(1, newLineInfoChanged.timestamp());
+            assertEquals(2, newLineInfoChanged.eventType());
             assertArrayEquals(newLineInfoChanged.padding(), prepareIntArray(5, INT_ARRAY));
             assertTrue(GpiolineInfoChanged.createEmpty().isEmpty());
         } catch (Throwable e) {

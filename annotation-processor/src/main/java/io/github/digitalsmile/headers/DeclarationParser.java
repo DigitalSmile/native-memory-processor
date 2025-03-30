@@ -103,7 +103,7 @@ public class DeclarationParser {
     public void parseDeclaration(Declaration declaration, NativeMemoryNode parentNode, boolean isTopLevel) {
         switch (declaration) {
             case Declaration.Scoped declarationScoped -> {
-                if (skipParsing(declaration.name(), declarationScoped.kind())) {
+                if (isTopLevel && skipParsing(declaration.name(), declarationScoped.kind())) {
                     return;
                 }
                 var nodeType = getNodeType(declarationScoped, declarationScoped.attributes());

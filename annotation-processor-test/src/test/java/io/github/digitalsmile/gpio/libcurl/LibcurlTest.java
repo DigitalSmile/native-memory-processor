@@ -13,15 +13,15 @@ public class LibcurlTest {
     public void libcurl() throws NativeMemoryException {
         try (var libcurl = new LibcurlNative()) {
             var code = libcurl.globalInit(CurlConstants.CURL_GLOBAL_DEFAULT);
-            assertEquals(code, CURLCode.CURLE_OK);
+            assertEquals(CURLCode.CURLE_OK, code);
             var curl = libcurl.easyInit();
             code = libcurl.easySetOpt(curl, CURLOption.CURLOPT_URL, "https://example.com");
-            assertEquals(code, CURLCode.CURLE_OK);
+            assertEquals(CURLCode.CURLE_OK, code);
             code = libcurl.easySetOpt(curl, CURLOption.CURLOPT_FOLLOWLOCATION, 1L);
-            assertEquals(code, CURLCode.CURLE_OK);
+            assertEquals(CURLCode.CURLE_OK, code);
 
             code = libcurl.easyPerform(curl);
-            assertEquals(code, CURLCode.CURLE_OK);
+            assertEquals(CURLCode.CURLE_OK, code);
         }
     }
 }

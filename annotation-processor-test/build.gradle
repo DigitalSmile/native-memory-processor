@@ -3,18 +3,25 @@ plugins {
 }
 
 group = 'io.github.digitalsmile.native'
+version = "1.1.5"
+
+java {
+    targetCompatibility = "22"
+    sourceCompatibility = "22"
+}
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testImplementation 'io.github.digitalsmile.native:annotation:1.1.4'
-    testAnnotationProcessor 'io.github.digitalsmile.native:annotation-processor:1.1.4'
+    testImplementation 'io.github.digitalsmile.native:annotation:${version}'
+    testAnnotationProcessor 'io.github.digitalsmile.native:annotation-processor:${version}'
 
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation("org.assertj:assertj-core:3.25.1")
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 jar {

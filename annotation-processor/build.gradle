@@ -1,18 +1,24 @@
 plugins {
     id 'java'
     id "com.vanniktech.maven.publish" version "0.29.0"
+    id "org.gradlex.extra-java-module-info" version "1.11"
 }
 
 group = 'io.github.digitalsmile.native'
-version = '1.1.4'
+version = '1.1.5'
 
 repositories {
     mavenCentral()
 }
 
+extraJavaModuleInfo {
+    automaticModule("io.soabase.java-composer:java-composer", "com.squareup.javapoet")
+    automaticModule("org.barfuin.texttree:text-tree", "org.barfuin.texttree")
+}
+
 dependencies {
     implementation 'io.soabase.java-composer:java-composer:1.0'
-    implementation 'io.github.digitalsmile.native:annotation:1.1.4'
+    implementation 'io.github.digitalsmile.native:annotation:${version}'
 
     annotationProcessor 'io.avaje:avaje-prisms:1.28'
     implementation 'io.avaje:avaje-prisms:1.28'
@@ -26,7 +32,7 @@ import com.vanniktech.maven.publish.SonatypeHost
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
-    coordinates("io.github.digitalsmile.native", "annotation-processor", "1.1.4")
+    coordinates("io.github.digitalsmile.native", "annotation-processor", "${version}")
 
     pom {
         name = "Native Memory Annotation processor"
@@ -60,7 +66,8 @@ javadoc {
 }
 
 java {
-    targetCompatibility = "22";
+    targetCompatibility = "22"
+    sourceCompatibility = "22"
 }
 
 jar {
